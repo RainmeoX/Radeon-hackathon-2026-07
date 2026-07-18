@@ -172,7 +172,6 @@ submissions/Neoh/
 │   ├── registry.py        # 工具注册中心
 │   ├── file_tools.py      # 文件操作工具
 │   ├── shell_tools.py     # 命令行执行工具
-│   ├── email_tools.py     # 邮件工具
 │   ├── code_tools.py      # 代码解释器
 │   └── system_tools.py    # 系统信息工具
 ├── memory/                # 记忆层
@@ -194,7 +193,7 @@ submissions/Neoh/
 
 | 模块 | 文件 | 职责 | 依赖 |
 |------|------|------|------|
-| **agent** | core.py | Agent 主循环，协调各组件 | langgraph, inference |
+| **agent** | core.py | Agent 主循环，协调各组件 | inference |
 | | planner.py | 将用户任务分解为步骤列表 | inference |
 | | executor.py | 执行单个步骤，调用工具 | tools, inference |
 | | reflector.py | 评估执行结果，判断是否完成 | inference |
@@ -204,7 +203,6 @@ submissions/Neoh/
 | **tools** | registry.py | 工具注册和发现机制 | - |
 | | file_tools.py | 文件读写、目录管理 | - |
 | | shell_tools.py | 安全沙箱内执行命令 | psutil |
-| | email_tools.py | 邮件发送（需用户配置） | - |
 | | code_tools.py | Python 代码解释执行 | - |
 | | system_tools.py | 系统状态查询 | psutil |
 | **memory** | manager.py | 统一记忆管理接口 | short_term, long_term |
@@ -269,8 +267,6 @@ submissions/Neoh/
 | **命令执行** | Shell 命令 | ❌ | subprocess (本地) | ✅ 完全合规 | 安全沙箱内执行 |
 | **代码解释** | Python 执行 | ❌ | exec/eval (本地) | ✅ 完全合规 | 受限环境执行 |
 | **系统信息** | CPU/GPU/内存 | ❌ | psutil/rocm-smi | ✅ 完全合规 | 本地系统调用 |
-| **邮件服务** | 邮件发送 | ⚠️ 可选 | SMTP (用户配置) | ⚠️ 需用户确认 | 用户可选择启用/禁用 |
-| | 邮件接收 | ❌ | 不支持 | ✅ 完全合规 | 未实现 |
 | **日历管理** | 日程查询 | ❌ | 不支持 | ✅ 完全合规 | 未实现 |
 | | 日程创建 | ❌ | 不支持 | ✅ 完全合规 | 未实现 |
 | **Web 搜索** | 网络搜索 | ❌ | 不支持 | ✅ 完全合规 | 离线优先设计 |
@@ -280,23 +276,13 @@ submissions/Neoh/
 | 原则 | 实现方式 |
 |------|---------|
 | 零数据外泄 | 所有 LLM 调用在本地执行，不发送数据到云端 |
-| 用户可控 | 邮件等外部服务需要用户主动配置和授权 |
-| 审计日志 | 记录所有高危操作，便于追溯 |
+| 用户可控 | 高危操作需用户主动审批授权 |
+| 审计日志 | 记录所有工具调用与审批决策，便于追溯 |
 | 操作审批 | 删除文件、执行命令等高危操作需用户确认 |
 
-### 6.3 支持的外部 API（可选）
+### 6.3 外部服务说明
 
-用户可根据需要在 `config.yaml` 中配置以下外部服务：
-
-```yaml
-external_services:
-  email:
-    enabled: false
-    smtp_server: "smtp.example.com"
-    smtp_port: 587
-    username: ""
-    password: ""
-```
+本项目采用**离线优先**设计，默认不依赖任何外部 API。所有 LLM 推理、向量检索、工具执行均在本地完成，确保数据隐私与离线可用性。
 
 ---
 
@@ -335,7 +321,6 @@ Phase 3: Agent 核心编排
 ├── [ ] 实现 tools/shell_tools.py (命令执行)
 ├── [ ] 实现 tools/code_tools.py (代码解释)
 ├── [ ] 实现 tools/system_tools.py (系统信息)
-├── [ ] 实现 tools/email_tools.py (邮件服务)
 ├── [ ] 实现 agent/planner.py (任务规划)
 ├── [ ] 实现 agent/executor.py (任务执行)
 ├── [ ] 实现 agent/reflector.py (结果反思)
@@ -364,7 +349,7 @@ Phase 6: 文档与提交
 | 优先级 | 标记 | 说明 |
 |--------|------|------|
 | 🔴 高 | 必须完成，阻塞后续工作 | 推理引擎、Agent 核心、RAG |
-| 🟡 中 | 重要功能，提升体验 | 前端界面、邮件工具 |
+| 🟡 中 | 重要功能，提升体验 | 前端界面、审计日志、审批机制 |
 | 🟢 低 | 可选优化，锦上添花 | 性能调优、额外工具 |
 
 ---

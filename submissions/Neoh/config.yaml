@@ -9,12 +9,20 @@ model:
 agent:
   max_iterations: 10
   memory_enabled: true
+  # 工具名必须与 tools/*.py 中 registry.register_tool(name=...) 一致
   tools:
-    - file_operations
-    - command_executor
-    - email_sender
+    - read_file
+    - write_file
+    - delete_file
+    - list_directory
+    - create_directory
+    - execute_command
+    - execute_python
     - code_interpreter
-    - system_info
+    - format_code
+    - get_system_info
+    - get_gpu_info
+    - get_process_list
 
 rag:
   vector_store: "faiss"
@@ -29,7 +37,9 @@ ui:
 
 security:
   audit_log_enabled: true
+  # 高危操作需用户审批（与 tools/*.py 中 requires_approval=True 对应）
   require_approval_for:
     - delete_file
     - execute_command
-    - send_email
+    - execute_python
+    - code_interpreter

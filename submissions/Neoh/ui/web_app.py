@@ -5,6 +5,7 @@ import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import tools  # noqa: F401  导入即触发所有工具注册到 registry
 from inference.engine import InferenceEngine, InferenceConfig
 from memory.manager import MemoryManager
 from agent.core import RadeonAgent

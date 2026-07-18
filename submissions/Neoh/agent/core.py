@@ -1,11 +1,13 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from inference.engine import InferenceEngine
 from memory.manager import MemoryManager
+import tools  # noqa: F401  导入即触发所有工具注册到 registry
 from tools.registry import registry
 from .planner import Planner
 from .executor import Executor
 from .reflector import Reflector
+from .audit import audit_logger
 
 logger = logging.getLogger(__name__)
 
@@ -16,12 +18,13 @@ class RadeonAgent:
         engine: InferenceEngine,
         memory_manager: Optional[MemoryManager] = None,
         max_iterations: int = 10,
+        approval_callback: Optional[Callable] = None,
     ):
         self.engine = engine
         self.memory_manager = memory_manager
         self.max_iterations = max_iterations
         self.planner = Planner(engine)
-        self.executor = Executor()
+        self.executor = Executor(approval_callback=approval_callback)
         self.reflector = Reflector(engine)
 
     def chat(self, message: str, use_rag: bool = True) -> str:
@@ -69,6 +72,9 @@ class RadeonAgent:
             self.memory_manager.add_short_term_memory({"role": "user", "content": message})
             self.memory_manager.add_short_term_memory({"role": "assistant", "content": response})
 
+        # 审计日志：记录对话（仅摘要，保护隐私）
+        audit_logger.log_chat(message=message, response=response, used_rag=bool(context))
+
         return response
 
     def run_task(self, task: str) -> Dict[str, Any]:
@@ -112,6 +118,14 @@ class RadeonAgent:
                 "role": "assistant",
                 "content": f"任务结果: {'完成' if final_result['success'] else '未完成'} - {reflection.get('reason', '')}",
             })
+
+        # 审计日志：记录任务执行
+        audit_logger.log_task(
+            task=task,
+            success=final_result["success"],
+            step_count=len(steps),
+            reflection=reflection,
+        )
 
         return final_result
 

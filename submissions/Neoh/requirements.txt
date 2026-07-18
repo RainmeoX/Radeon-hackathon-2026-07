@@ -1,8 +1,5 @@
-langgraph>=0.2.0
-langchain>=0.2.0
-langchain-core>=0.2.0
-langchain-community>=0.2.0
-# llama-cpp-python 需要 ROCm 编译，见 install.sh / install.bat
+# Agent 架构采用手写 Planner→Executor→Reflector 三段式，无外部 Agent 框架依赖
+# llama-cpp-python 需要 ROCm 编译，见 install_rocm.sh / install_rocm.bat
 # llama-cpp-python>=0.2.0
 faiss-cpu>=1.8.0
 sentence-transformers>=3.0.0
