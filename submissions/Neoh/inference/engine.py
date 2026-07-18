@@ -131,8 +131,7 @@ class InferenceEngine:
     def chat_completion(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """Chat 对话补全。
 
-        使用 tokenizer 自带的 chat template 构造 prompt，再调用 generate。
-        Qwen2.5 的 chat template 会自动处理 <|im_start|>/<|im_end|> 标记。
+        使用 vLLM 原生的 chat() 方法，自动处理 chat template。
 
         Args:
             messages: [{"role": "system/user/assistant", "content": "..."}]
@@ -141,17 +140,27 @@ class InferenceEngine:
         Returns:
             生成的回复文本
         """
-        if not self.tokenizer:
-            raise RuntimeError("Tokenizer not initialized")
+        if not self.llm:
+            raise RuntimeError("LLM engine not initialized")
 
-        # 用 tokenizer 的 chat template 构造 prompt
-        prompt = self.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
+        from vllm import SamplingParams
+
+        max_tokens = kwargs.get("max_tokens", self.config.max_tokens)
+        temperature = kwargs.get("temperature", self.config.temperature)
+
+        sampling_params = SamplingParams(
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stop=["<|im_end|>", "</s>"],
         )
 
-        return self.generate(prompt, **kwargs)
+        try:
+            # vLLM 0.25+ 原生支持 chat()，自动 apply chat template
+            outputs = self.llm.chat(messages, sampling_params)
+            return outputs[0].outputs[0].text.strip()
+        except Exception as e:
+            logger.error(f"Chat completion error: {str(e)}")
+            raise
 
     def get_model_info(self) -> Dict[str, Any]:
         if not self.llm:
