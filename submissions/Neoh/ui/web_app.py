@@ -23,13 +23,12 @@ def init_engine():
     
     model_config = config.get("model", {})
     inference_config = InferenceConfig(
-        model_path=model_config.get("path", "./models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"),
-        n_gpu_layers=model_config.get("n_gpu_layers", -1),
+        model_path=model_config.get("path", "./models/Qwen2.5-7B-Instruct"),
         n_ctx=model_config.get("n_ctx", 8192),
-        n_batch=model_config.get("n_batch", 512),
         temperature=model_config.get("temperature", 0.7),
         max_tokens=model_config.get("max_tokens", 4096),
-        chat_format="qwen2",
+        dtype=model_config.get("dtype", "float16"),
+        gpu_memory_utilization=model_config.get("gpu_memory_utilization", 0.90),
     )
     
     engine = InferenceEngine(inference_config)

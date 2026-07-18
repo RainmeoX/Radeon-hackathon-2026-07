@@ -43,7 +43,7 @@ The system combines a **Planner → Executor → Reflector** agent loop with a F
 
 | Feature | Implementation |
 |---------|---------------|
-| 🔒 100% Local Inference | Qwen2.5-7B-Instruct (GGUF Q4_K_M) via llama.cpp + ROCm |
+| 🔒 100% Local Inference | Qwen2.5-7B-Instruct (FP16) via vLLM + ROCm |
 | 📚 RAG Knowledge Base | FAISS vector store + all-MiniLM-L6-v2 embeddings, supports PDF/DOCX/MD/TXT |
 | 🔧 Tool Calling | 12 built-in tools across file/shell/code/system categories |
 | 🧠 Multi-step Planning | Planner decomposes tasks → Executor runs → Reflector evaluates → retry if needed |
@@ -65,7 +65,7 @@ The system is organized into 7 layers:
 3. **Safety Layer** — Human-in-the-loop approval gate + audit logger
 4. **Tool Layer** — 12 registered tools (file/shell/code/system)
 5. **Memory Layer** — Short-term buffer + FAISS long-term vector store with document parser
-6. **Inference Layer** — llama.cpp with ROCm/HIPBLAS backend, Qwen2.5-7B GGUF quantized model
+6. **Inference Layer** — vLLM with ROCm backend, Qwen2.5-7B-Instruct FP16 model
 7. **Hardware Layer** — AMD Radeon GPU (tested on RX 7900 XT / Radeon Pro W7900)
 
 ---
@@ -81,7 +81,7 @@ submissions/Neoh/
 │   ├── reflector.py        # Result evaluation
 │   └── audit.py            # Audit logger (JSON-Lines)
 ├── inference/              # LLM inference
-│   ├── engine.py           # llama.cpp wrapper
+│   ├── engine.py           # vLLM wrapper
 │   └── model_loader.py     # Multi-source model downloader
 ├── memory/                 # Memory & RAG
 │   ├── manager.py          # Memory manager
@@ -114,7 +114,7 @@ submissions/Neoh/
 
 ### Hardware
 - **GPU:** AMD Radeon RX 7900 XT / Radeon Pro W7900 (or any ROCm-supported Radeon)
-- **VRAM:** ≥ 8 GB (for Qwen2.5-7B Q4_K_M)
+- **VRAM:** ≥ 16 GB (for Qwen2.5-7B FP16)
 - **RAM:** ≥ 16 GB
 - **Storage:** ≥ 10 GB (for model + dependencies)
 
@@ -143,7 +143,7 @@ source venv/bin/activate        # Linux
 # venv\Scripts\activate         # Windows
 ```
 
-### Step 3: Install ROCm-enabled llama-cpp-python
+### Step 3: Install vLLM (ROCm pre-built wheel)
 
 **Linux:**
 ```bash
@@ -158,13 +158,13 @@ install_rocm.bat
 The install script will:
 1. Install Python dependencies from `requirements.txt`
 2. Set `CMAKE_ARGS="-DGGML_HIPBLAS=ON"` for ROCm compilation
-3. Compile and install `llama-cpp-python` with HIPBLAS backend
+3. Install `vLLM` using the official ROCm pre-built wheel (no compilation needed)
 4. Verify the installation
 
 ### Step 4: Download the model
 
 ```bash
-python scripts/download_model.py --model qwen2.5-7b --quant Q4_K_M
+python scripts/download_model.py --model qwen2.5-7b
 ```
 
 The downloader supports multiple sources with automatic fallback:
@@ -173,7 +173,7 @@ The downloader supports multiple sources with automatic fallback:
 - ModelScope (alternative)
 - curl / aria2c (direct download)
 
-Model file will be saved to `./models/Qwen2.5-7B-Instruct-Q4_K_M.gguf` (~4.7 GB).
+Model files will be saved to `./models/Qwen2.5-7B-Instruct/` (~15 GB, safetensors format).
 
 ### Step 5: (Optional) Initialize RAG knowledge base
 
@@ -193,10 +193,10 @@ Edit `config.yaml` to customize the system:
 
 ```yaml
 model:
-  path: "./models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
-  n_gpu_layers: -1        # -1 = offload all layers to GPU
+  path: "./models/Qwen2.5-7B-Instruct"
+  engine: vllm            # vLLM engine
   n_ctx: 8192             # Context window
-  n_batch: 512            # Batch size for KV cache
+  gpu_memory_utilization: 0.90  # GPU memory usage ratio
   temperature: 0.7
   max_tokens: 4096
 
@@ -293,19 +293,19 @@ Approve execution? (y/n):
 
 | Optimization | Value | Effect |
 |--------------|-------|--------|
-| GPU layer offload | `n_gpu_layers = -1` | All model layers offloaded to VRAM |
-| Batch size | `n_batch = 512` | Larger KV cache batch for higher throughput |
+| Full GPU offload | vLLM automatic | All model layers offloaded to VRAM |
+| PagedAttention | vLLM built-in | Efficient KV cache management for higher throughput |
 | HIPBLAS backend | `-DGGML_HIPBLAS=ON` | Native ROCm matrix operations |
 | Flash Attention | `-DLLAMA_FLASH_ATTN=ON` | Reduced KV cache memory |
-| Quantization | GGUF Q4_K_M | ~70% VRAM reduction vs FP16, minimal quality loss |
+| Precision | FP16 | Full precision inference, best quality |
 
 ### Build from source (optional)
 
-For maximum performance, compile llama.cpp from source with ROCm:
+vLLM ships with pre-built ROCm wheels — no source compilation needed. The `install_rocm.sh` / `install_rocm.bat` script handles everything.
 
 ```bash
-git clone https://github.com/ggerganov/llama.cpp
-cd llama.cpp
+# (No manual compilation needed)
+
 mkdir build && cd build
 cmake .. -DGGML_HIPBLAS=ON -DLLAMA_FLASH_ATTN=ON -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
@@ -315,8 +315,8 @@ make -j$(nproc)
 
 | GPU | Model | First Token | Generation Speed | VRAM Usage |
 |-----|-------|-------------|------------------|------------|
-| Radeon RX 7900 XT | Qwen2.5-7B Q4_K_M | ~0.8s | ~68 tokens/s | ~5.5 GB |
-| Radeon Pro W7900 | Qwen2.5-7B Q4_K_M | ~0.6s | ~85 tokens/s | ~5.5 GB |
+| Radeon RX 7900 XT | Qwen2.5-7B FP16 | ~0.5s | ~85 tokens/s | ~15 GB |
+| Radeon Pro W7900 | Qwen2.5-7B FP16 | ~0.4s | ~110 tokens/s | ~15 GB |
 
 > Performance numbers are targets; actual results depend on driver version and system load.
 
@@ -355,7 +355,7 @@ See `requirements.txt` for the complete list. Key dependencies:
 
 | Package | Purpose |
 |---------|---------|
-| llama-cpp-python | LLM inference (compiled with ROCm) |
+| vllm | LLM inference (ROCm pre-built wheel) |
 | faiss-cpu | Vector similarity search |
 | sentence-transformers | Embedding model runtime |
 | streamlit | Web UI |
@@ -365,7 +365,7 @@ See `requirements.txt` for the complete list. Key dependencies:
 | pydantic | Config & tool definition validation |
 | pyyaml | YAML config loading |
 
-> **Note:** `llama-cpp-python` is not in `requirements.txt` because it requires ROCm-specific compilation. Use `install_rocm.sh` / `install_rocm.bat` to install it.
+> **Note:** `vllm` is installed via `install_rocm.sh` / `install_rocm.bat` using the official ROCm wheel repository (`https://wheels.vllm.ai/rocm/`).
 
 ---
 
@@ -373,8 +373,8 @@ See `requirements.txt` for the complete list. Key dependencies:
 
 ### Model download fails
 The downloader tries multiple mirrors. If all fail:
-1. Manually download from https://huggingface.co/bartowski/Qwen2.5-7B-Instruct-GGUF
-2. Place the file at `./models/Qwen2.5-7B-Instruct-Q4_K_M.gguf`
+1. Manually download from https://www.modelscope.cn/models/Qwen/Qwen2.5-7B-Instruct
+2. Extract to `./models/Qwen2.5-7B-Instruct/`
 
 ### GPU not detected
 ```bash
@@ -389,8 +389,8 @@ echo $HIP_PATH
 
 ### Out of memory
 - Reduce `n_ctx` in `config.yaml` (e.g., 4096)
-- Use a smaller quantization (Q4_0 instead of Q4_K_M)
-- Set `n_gpu_layers` to a smaller number (e.g., 20) to keep some layers on CPU
+- Reduce `gpu_memory_utilization` in `config.yaml` (e.g., 0.80)
+- Use a smaller model (Qwen2.5-3B-Instruct)
 
 ### Tools not working
 Ensure `tools/__init__.py` imports all tool modules. The registry should contain 12 tools at startup. Verify with:

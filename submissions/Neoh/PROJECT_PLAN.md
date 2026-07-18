@@ -17,7 +17,7 @@
 | 维度 | 说明 |
 |------|------|
 | 🎯 隐私保护 | 100% 数据本地处理，零外部 API 调用 |
-| ⚡ 高性能 | 基于 ROCm + llama.cpp 的 GPU 加速推理 |
+| ⚡ 高性能 | 基于 ROCm + vLLM 的 GPU 加速推理 |
 | 🔧 可扩展 | 模块化架构，支持工具扩展和模型切换 |
 | 📚 知识驱动 | 内置 RAG 系统，支持私有文档问答 |
 
@@ -29,7 +29,7 @@
 
 | 组件 | 选型 | 版本 | 用途 |
 |------|------|------|------|
-| 基础大模型 | Qwen2.5-7B-Instruct | GGUF Q4_K_M | 核心推理、任务规划、工具调用决策 |
+| 基础大模型 | Qwen2.5-7B-Instruct | FP16 (safetensors) | 核心推理、任务规划、工具调用决策 |
 | Embedding 模型 | all-MiniLM-L6-v2 | - | 文档向量化、语义检索 |
 | 向量数据库 | FAISS | 1.8.0 | 本地向量存储与相似度检索 |
 
@@ -49,9 +49,9 @@
 ```yaml
 model:
   path: "./models/qwen2.5-7b-instruct-q4_k_m.gguf"
-  n_gpu_layers: -1        # 全部加载到 GPU
+  engine: vllm            # vLLM 推理引擎
   n_ctx: 8192             # 上下文窗口大小
-  n_batch: 512            # 批处理大小
+  gpu_memory_utilization: 0.90  # GPU 显存占用比例
   temperature: 0.7        # 创造性控制
   max_tokens: 4096        # 最大生成长度
 ```
@@ -77,8 +77,8 @@ model:
 │  └─ 加载工具列表                                                 │
 │                                                                 │
 │  Step 3: 模型初始化                                              │
-│  ├─ 加载 GGUF 模型到 GPU                                        │
-│  ├─ 设置 n_gpu_layers=-1 (全量 offload)                         │
+│  ├─ 加载 safetensors 模型到 GPU                                 │
+│  ├─ vLLM 自动全量 offload + PagedAttention                      │
 │  └─ 初始化 KV 缓存                                               │
 │                                                                 │
 │  Step 4: 组件初始化                                              │
@@ -166,7 +166,7 @@ submissions/Neoh/
 │   ├── reflector.py       # 结果反思器
 │   └── reviser.py         # 计划修正器
 ├── inference/             # 推理引擎层
-│   ├── engine.py          # llama.cpp 封装
+│   ├── engine.py          # vLLM 封装
 │   └── model_loader.py    # 模型加载管理
 ├── tools/                 # 工具层
 │   ├── registry.py        # 工具注册中心
@@ -198,7 +198,7 @@ submissions/Neoh/
 | | executor.py | 执行单个步骤，调用工具 | tools, inference |
 | | reflector.py | 评估执行结果，判断是否完成 | inference |
 | | reviser.py | 根据评估结果修正计划 | inference |
-| **inference** | engine.py | llama.cpp 推理引擎封装 | llama-cpp-python |
+| **inference** | engine.py | vLLM 推理引擎封装 | vllm |
 | | model_loader.py | 模型加载和配置管理 | engine.py |
 | **tools** | registry.py | 工具注册和发现机制 | - |
 | | file_tools.py | 文件读写、目录管理 | - |
@@ -257,9 +257,9 @@ submissions/Neoh/
 
 | 功能模块 | 功能点 | 是否使用外部 API | 使用的服务 | 隐私合规性 | 说明 |
 |----------|--------|------------------|-----------|-----------|------|
-| **核心推理** | LLM 对话生成 | ❌ | llama.cpp (本地) | ✅ 完全合规 | 所有推理在本地 GPU 执行 |
-| | 任务规划 | ❌ | llama.cpp (本地) | ✅ 完全合规 | 同上 |
-| | 工具调用决策 | ❌ | llama.cpp (本地) | ✅ 完全合规 | 同上 |
+| **核心推理** | LLM 对话生成 | ❌ | vLLM (本地) | ✅ 完全合规 | 所有推理在本地 GPU 执行 |
+| | 任务规划 | ❌ | vLLM (本地) | ✅ 完全合规 | 同上 |
+| | 工具调用决策 | ❌ | vLLM (本地) | ✅ 完全合规 | 同上 |
 | **RAG 系统** | 文档向量化 | ❌ | sentence-transformers (本地) | ✅ 完全合规 | 使用 all-MiniLM-L6-v2 |
 | | 相似度检索 | ❌ | FAISS (本地) | ✅ 完全合规 | 向量数据库本地运行 |
 | **文件操作** | 读写文件 | ❌ | Python 标准库 | ✅ 完全合规 | 本地文件系统操作 |
@@ -305,7 +305,7 @@ submissions/Neoh/
 Phase 1: 环境搭建与核心推理
 ├── [x] 创建项目目录结构
 ├── [x] 创建 requirements.txt 和 config.yaml
-├── [ ] 实现 inference/engine.py (llama.cpp 封装)
+├── [ ] 实现 inference/engine.py (vLLM 封装)
 ├── [ ] 实现 inference/model_loader.py (模型加载)
 └── [ ] 创建 scripts/download_model.py (模型下载)
 
@@ -361,9 +361,9 @@ Phase 6: 文档与提交
 | 风险 | 概率 | 影响 | 应对策略 |
 |------|------|------|---------|
 | ROCm 环境配置复杂 | 高 | 高 | 提供 Docker 一键部署方案 |
-| llama.cpp GPU 加速问题 | 中 | 高 | 提供 CPU 降级方案 |
+| vLLM ROCm 兼容问题 | 中 | 高 | 使用官方 ROCm 预编译 wheel |
 | 模型下载缓慢 | 中 | 中 | 提供模型镜像下载链接 |
-| GPU 显存不足 | 低 | 高 | 使用 Q4_K_M 量化，支持模型分片 |
+| GPU 显存不足 | 低 | 高 | 降低 gpu_memory_utilization，或换用更小模型 |
 | 工具调用安全性 | 中 | 中 | 高危操作审批机制 |
 
 ### 8.2 降级方案
@@ -382,7 +382,7 @@ FAISS 初始化失败 → 跳过 RAG，仅使用基础对话
 
 | 验收项 | 通过条件 | 测试方法 |
 |--------|---------|---------|
-| 模型加载 | 成功加载 Qwen2.5-7B 到 GPU | 检查 llama.cpp 输出 |
+| 模型加载 | 成功加载 Qwen2.5-7B 到 GPU | 检查 vLLM 输出 |
 | RAG 问答 | 基于上传文档准确回答问题 | 上传测试文档并提问 |
 | 工具调用 | 正确识别并调用工具 | 测试文件读写、命令执行 |
 | 任务规划 | 分解复杂任务并执行 | 测试多步骤任务 |

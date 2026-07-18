@@ -1,8 +1,10 @@
 model:
-  path: "./models/Qwen2.5-7B-Instruct-Q4_K_M.gguf"
-  n_gpu_layers: -1
+  # vLLM 加载 safetensors 格式（目录路径，非单文件）
+  path: "./models/Qwen2.5-7B-Instruct"
+  engine: "vllm"
+  dtype: "float16"
+  gpu_memory_utilization: 0.90
   n_ctx: 8192
-  n_batch: 512
   temperature: 0.7
   max_tokens: 4096
 
