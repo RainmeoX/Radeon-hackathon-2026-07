@@ -1,6 +1,13 @@
+# ---- ROCm 环境变量（必须在所有其他 import 之前设置）----
+# W7900 / RX 7900 系列是 gfx1100，vLLM 需要 override 才能识别
+import os
+os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")
+os.environ.setdefault("PYTORCH_ROCM_ARCH", "gfx1100")
+os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")
+os.environ.setdefault("HSA_ENABLE_SDMA", "0")
+
 import logging
 import sys
-import os
 import subprocess
 import argparse
 

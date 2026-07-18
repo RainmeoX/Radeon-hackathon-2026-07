@@ -12,6 +12,16 @@ API 与原 llama_cpp 版本保持兼容：
 
 import logging
 import os
+
+# ---- ROCm 环境变量（必须在 import torch/vllm 之前设置）----
+# W7900 / RX 7900 系列是 gfx1100 架构，vLLM 官方 wheel 默认为
+# 数据中心卡（MI200/MI300）编译，需要 override 才能识别消费级/专业卡。
+os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")
+os.environ.setdefault("PYTORCH_ROCM_ARCH", "gfx1100")
+os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")  # 默认用第一张 GPU
+# 避免 ROCm 在多 GPU 环境下的锁冲突
+os.environ.setdefault("HSA_ENABLE_SDMA", "0")
+
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
