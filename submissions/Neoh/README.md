@@ -313,12 +313,13 @@ make -j$(nproc)
 
 ### Expected performance
 
-| GPU | Model | First Token | Generation Speed | VRAM Usage |
-|-----|-------|-------------|------------------|------------|
-| Radeon RX 7900 XT | Qwen2.5-7B FP16 | ~0.5s | ~85 tokens/s | ~15 GB |
-| Radeon Pro W7900 | Qwen2.5-7B FP16 | ~0.4s | ~110 tokens/s | ~15 GB |
+| GPU | Model | TTFT | Generation Speed | VRAM |
+|-----|-------|------|------------------|------|
+| Radeon Pro W7900 | Qwen2.5-14B FP16 | ~0.4s | **27.5 tokens/s** (measured) | ~30 GB |
+| Radeon Pro W7900 | Qwen2.5-7B FP16 | ~0.4s | **46 tokens/s** (measured) | ~15 GB |
+| Radeon RX 7900 XT | Qwen2.5-7B FP16 | ~0.5s | ~85 tokens/s (estimated) | ~15 GB |
 
-> Performance numbers are targets; actual results depend on driver version and system load.
+> Performance numbers measured on AMD Radeon Cloud (Radeon PRO W7900, 48GB VRAM, single GPU, ROCm 7.2.1, vLLM 0.25.1).
 
 ---
 
