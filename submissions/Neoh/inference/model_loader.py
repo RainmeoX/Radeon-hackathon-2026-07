@@ -34,10 +34,15 @@ MODEL_FILENAMES = {
 }
 
 MIRROR_ENDPOINTS = [
-    None,
     "https://hf-mirror.com",
+    None,
     "https://hf-mirror.cn",
 ]
+
+MODELSCOPE_REPOS = {
+    "qwen2.5-7b": "Qwen/Qwen2.5-7B-Instruct-GGUF",
+    "qwen2.5-14b": "Qwen/Qwen2.5-14B-Instruct-GGUF",
+}
 
 
 class ModelLoader:
@@ -119,6 +124,40 @@ class ModelLoader:
             logger.warning(f"aria2c download failed: {str(e)}")
             return False
 
+    def _download_with_modelscope(self, model_name: str, expected_filename: str, save_path: str) -> bool:
+        try:
+            from modelscope import snapshot_download
+
+            if model_name not in MODELSCOPE_REPOS:
+                return False
+
+            repo_id = MODELSCOPE_REPOS[model_name]
+            logger.info(f"Trying ModelScope download: {repo_id}")
+
+            downloaded_dir = snapshot_download(
+                repo_id=repo_id,
+                cache_dir=self.models_dir,
+            )
+
+            for root, dirs, files in os.walk(downloaded_dir):
+                for f in files:
+                    if f.endswith(".gguf"):
+                        found_path = os.path.join(root, f)
+                        if f == expected_filename:
+                            os.rename(found_path, save_path)
+                        else:
+                            os.rename(found_path, save_path)
+                        logger.info("Download succeeded via ModelScope")
+                        return True
+
+            return False
+        except ImportError:
+            logger.warning("modelscope not installed")
+            return False
+        except Exception as e:
+            logger.warning(f"ModelScope download failed: {str(e)}")
+            return False
+
     def download_model(self, model_name: str, quant: str = "Q4_K_M") -> str:
         if model_name not in MODEL_REPOS:
             raise ValueError(f"Unsupported model: {model_name}. Supported: {list(MODEL_REPOS.keys())}")
@@ -142,8 +181,12 @@ class ModelLoader:
         if self._download_with_huggingface_hub(repo_id, pattern, save_path):
             return save_path
 
+        if self._download_with_modelscope(model_name, expected_filename, save_path):
+            return save_path
+
         mirrors = [
             "https://hf-mirror.com",
+            "https://modelscope.cn",
             "https://huggingface.co",
         ]
         for mirror in mirrors:
