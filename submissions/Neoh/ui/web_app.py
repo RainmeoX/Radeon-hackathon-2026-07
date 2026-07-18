@@ -36,6 +36,8 @@ def init_engine():
         max_tokens=model_config.get("max_tokens", 4096),
         dtype=model_config.get("dtype", "float16"),
         gpu_memory_utilization=model_config.get("gpu_memory_utilization", 0.90),
+        tensor_parallel_size=model_config.get("tensor_parallel_size", 1),
+        pipeline_parallel_size=model_config.get("pipeline_parallel_size", 1),
     )
     
     engine = InferenceEngine(inference_config)

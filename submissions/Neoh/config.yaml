@@ -7,6 +7,11 @@ model:
   n_ctx: 8192
   temperature: 0.7
   max_tokens: 4096
+  # 多卡并行（ROCm 7.2.1 仅 1 或 8 稳定，2/4/6 可能失败）
+  # 单卡跑 7B/14B 用 tensor_parallel_size: 1
+  # 8 卡跑 32B 用 tensor_parallel_size: 8
+  tensor_parallel_size: 1
+  pipeline_parallel_size: 1
 
 agent:
   max_iterations: 10

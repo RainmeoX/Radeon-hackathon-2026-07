@@ -40,6 +40,9 @@ class InferenceConfig(BaseModel):
     gpu_memory_utilization: float = Field(0.90, description="GPU 显存占用比例")
     dtype: str = Field("float16", description="模型精度：float16/bfloat16/auto")
     trust_remote_code: bool = Field(True, description="是否信任远程代码")
+    # 多卡并行参数
+    tensor_parallel_size: int = Field(1, description="张量并行 GPU 数（ROCm 7.2.1 仅 1/8 稳定）")
+    pipeline_parallel_size: int = Field(1, description="流水线并行 GPU 数")
 
 
 class InferenceEngine:
@@ -60,6 +63,8 @@ class InferenceEngine:
             logger.info(f"Loading model from {self.config.model_path}")
             logger.info(f"Context: {self.config.n_ctx}, dtype: {self.config.dtype}")
             logger.info(f"GPU memory utilization: {self.config.gpu_memory_utilization}")
+            logger.info(f"Tensor parallel: {self.config.tensor_parallel_size}, "
+                        f"Pipeline parallel: {self.config.pipeline_parallel_size}")
 
             # 加载 tokenizer（用于 chat template）
             self.tokenizer = AutoTokenizer.from_pretrained(
@@ -76,7 +81,8 @@ class InferenceEngine:
                 trust_remote_code=self.config.trust_remote_code,
                 # ROCm 优化
                 enforce_eager=False,  # 启用 CUDA graph（ROCm 也支持）
-                tensor_parallel_size=1,  # 单卡
+                tensor_parallel_size=self.config.tensor_parallel_size,
+                pipeline_parallel_size=self.config.pipeline_parallel_size,
             )
             logger.info("Model loaded successfully (vLLM + ROCm)")
 
