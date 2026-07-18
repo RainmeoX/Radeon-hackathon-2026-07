@@ -13,6 +13,7 @@ class InferenceConfig(BaseModel):
     n_batch: int = Field(512, description="批处理大小")
     temperature: float = Field(0.7, description="温度参数")
     max_tokens: int = Field(4096, description="最大生成token数")
+    chat_format: str = Field("qwen2", description="对话格式：qwen2, llama, chatml")
 
 
 class InferenceEngine:
@@ -43,18 +44,32 @@ class InferenceEngine:
         if not self.llm:
             raise RuntimeError("LLM engine not initialized")
 
+        stop_tokens = self._get_stop_tokens()
+
         try:
             response = self.llm(
                 prompt=prompt,
                 max_tokens=kwargs.get("max_tokens", self.config.max_tokens),
                 temperature=kwargs.get("temperature", self.config.temperature),
-                stop=["</s>", "[INST]", "[/INST]", "USER:", "ASSISTANT:"],
+                stop=stop_tokens,
                 echo=False,
             )
             return response["choices"][0]["text"].strip()
         except Exception as e:
             logger.error(f"Inference error: {str(e)}")
             raise
+
+    def _get_stop_tokens(self) -> List[str]:
+        format = self.config.chat_format.lower()
+        
+        if format == "qwen2":
+            return ["<|im_end|>", "</s>"]
+        elif format == "llama":
+            return ["</s>", "[INST]", "[/INST]"]
+        elif format == "chatml":
+            return ["<|im_end|>", "</s>"]
+        else:
+            return ["<|im_end|>", "</s>"]
 
     def chat_completion(self, messages: List[Dict[str, str]], **kwargs) -> str:
         if not self.llm:
@@ -64,6 +79,35 @@ class InferenceEngine:
         return self.generate(prompt, **kwargs)
 
     def _build_chat_prompt(self, messages: List[Dict[str, str]]) -> str:
+        format = self.config.chat_format.lower()
+        
+        if format == "qwen2":
+            return self._build_qwen2_prompt(messages)
+        elif format == "llama":
+            return self._build_llama_prompt(messages)
+        elif format == "chatml":
+            return self._build_chatml_prompt(messages)
+        else:
+            return self._build_qwen2_prompt(messages)
+
+    def _build_qwen2_prompt(self, messages: List[Dict[str, str]]) -> str:
+        prompt_parts = []
+        
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            
+            if role == "system":
+                prompt_parts.append(f"<|im_start|>system\n{content}<|im_end|>")
+            elif role == "user":
+                prompt_parts.append(f"<|im_start|>user\n{content}<|im_end|>")
+            elif role == "assistant":
+                prompt_parts.append(f"<|im_start|>assistant\n{content}<|im_end|>")
+        
+        prompt_parts.append("<|im_start|>assistant\n")
+        return "".join(prompt_parts)
+
+    def _build_llama_prompt(self, messages: List[Dict[str, str]]) -> str:
         prompt_parts = []
         
         for msg in messages:
@@ -78,6 +122,23 @@ class InferenceEngine:
                 prompt_parts.append(content)
         
         return "\n".join(prompt_parts)
+
+    def _build_chatml_prompt(self, messages: List[Dict[str, str]]) -> str:
+        prompt_parts = []
+        
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            
+            if role == "system":
+                prompt_parts.append(f"<|im_start|>system\n{content}<|im_end|>")
+            elif role == "user":
+                prompt_parts.append(f"<|im_start|>user\n{content}<|im_end|>")
+            elif role == "assistant":
+                prompt_parts.append(f"<|im_start|>assistant\n{content}<|im_end|>")
+        
+        prompt_parts.append("<|im_start|>assistant\n")
+        return "".join(prompt_parts)
 
     def get_model_info(self) -> Dict[str, Any]:
         if not self.llm:

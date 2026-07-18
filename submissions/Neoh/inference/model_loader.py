@@ -17,6 +17,17 @@ MODEL_DOWNLOAD_URLS = {
     },
 }
 
+MODEL_FILENAMES = {
+    "qwen2.5-7b": {
+        "Q4_K_M": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+        "Q5_K_M": "Qwen2.5-7B-Instruct-Q5_K_M.gguf",
+    },
+    "qwen2.5-14b": {
+        "Q4_K_M": "Qwen2.5-14B-Instruct-Q4_K_M.gguf",
+        "Q5_K_M": "Qwen2.5-14B-Instruct-Q5_K_M.gguf",
+    },
+}
+
 
 class ModelLoader:
     def __init__(self, models_dir: str = "./models"):
@@ -76,10 +87,13 @@ class ModelLoader:
         return models
 
     def get_model_path(self, model_name: str, quant: str = "Q4_K_M") -> Optional[str]:
-        if model_name not in MODEL_DOWNLOAD_URLS:
+        if model_name not in MODEL_FILENAMES:
             return None
 
-        filename = f"{model_name.replace('-', '')}-Instruct-{quant}.gguf"
+        if quant not in MODEL_FILENAMES[model_name]:
+            return None
+
+        filename = MODEL_FILENAMES[model_name][quant]
         save_path = os.path.join(self.models_dir, filename)
 
         if os.path.exists(save_path):
