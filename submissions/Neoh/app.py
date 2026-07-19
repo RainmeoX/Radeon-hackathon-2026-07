@@ -101,14 +101,22 @@ def run_cli():
         print("-" * 50)
         
         while True:
-            prompt = input("\n你: ")
-            
+            prompt = input("\n你: ").strip()
+
             if prompt.lower() in ["quit", "exit", "q"]:
                 print("再见!")
                 break
-            
-            if prompt.lower().startswith("task "):
-                task = prompt[5:].strip()
+
+            # 清理输入：去掉可能的前缀（如 "你: " 或复制粘贴的提示符）
+            clean = prompt
+            for prefix in ["你: ", "你:", "you: ", "you:"]:
+                if clean.lower().startswith(prefix):
+                    clean = clean[len(prefix):].strip()
+                    break
+
+            # 任务模式：以 "task " 开头
+            if clean.lower().startswith("task "):
+                task = clean[5:].strip()
                 print("正在执行任务...")
                 result = agent.run_task(task)
                 print(f"\n{'='*50}")
@@ -116,9 +124,18 @@ def run_cli():
                 reflection = result.get('reflection', {})
                 reason = str(reflection.get('reason', ''))[:200]
                 print(f"评估: {reason}")
+                # 打印步骤执行情况
+                steps = result.get('steps', [])
+                results = result.get('results', [])
+                if steps:
+                    print(f"\n执行步骤数: {len(steps)}")
+                    for i, (s, r) in enumerate(zip(steps, results)):
+                        tool = s.get('tool') or '无'
+                        success = '✅' if r.get('success') else '❌'
+                        print(f"  步骤{i+1}: {s.get('description','')[:40]} | 工具: {tool} {success}")
                 print(f"{'='*50}")
             else:
-                response = agent.chat(prompt)
+                response = agent.chat(clean)
                 print(f"\n助手: {response}")
     
     except Exception as e:
