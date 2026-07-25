@@ -4,10 +4,12 @@ from inference.engine import InferenceEngine
 from memory.manager import MemoryManager
 import tools  # noqa: F401  导入即触发所有工具注册到 registry
 from tools.registry import registry
+from tools.hardware_tools import set_engine  # 注入推理引擎给硬件生成工具
 from .planner import Planner
 from .executor import Executor
 from .reflector import Reflector
 from .audit import audit_logger
+from .prompts import get_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,7 @@ class RadeonAgent:
         memory_manager: Optional[MemoryManager] = None,
         max_iterations: int = 10,
         approval_callback: Optional[Callable] = None,
+        prompt_mode: str = None,
     ):
         self.engine = engine
         self.memory_manager = memory_manager
@@ -26,8 +29,12 @@ class RadeonAgent:
         self.planner = Planner(engine)
         self.executor = Executor(approval_callback=approval_callback)
         self.reflector = Reflector(engine)
+        # system prompt 模式：hardware（默认，磐石硬件研发定位）/ generic（通用）
+        self.prompt_mode = prompt_mode or "hardware"
+        # 把推理引擎注入硬件生成工具（Verilog/Testbench），保持工具无状态契约
+        set_engine(engine)
 
-    def chat(self, message: str, use_rag: bool = True) -> str:
+    def chat(self, message: str, use_rag: bool = True, prompt_mode: str = None) -> str:
         context = ""
         
         if self.memory_manager and use_rag:
@@ -43,18 +50,8 @@ class RadeonAgent:
             content = msg.get("content", "")
             memory_text += f"{role}: {content}\n"
 
-        system_prompt = """你是一个基于 AMD Radeon GPU 的本地 AI 助手。请用中文回答用户的问题。
-
-你的特点:
-- 所有推理计算在本地 GPU 完成，数据隐私安全
-- 支持 RAG 文档问答
-- 支持工具调用和多步骤任务规划
-
-请遵循以下原则:
-1. 直接回答用户的问题，不需要解释思考过程
-2. 如果问题涉及文档内容，请参考提供的参考文档
-3. 如果需要执行多步骤任务，请使用工具调用
-"""
+        # system prompt 按模式切换：hardware（磐石硬件研发定位）/ generic（通用）
+        system_prompt = get_system_prompt(prompt_mode or self.prompt_mode)
 
         messages = [{"role": "system", "content": system_prompt}]
         

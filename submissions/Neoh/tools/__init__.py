@@ -9,6 +9,7 @@ from . import file_tools  # noqa: F401
 from . import shell_tools  # noqa: F401
 from . import system_tools  # noqa: F401
 from . import code_tools  # noqa: F401
+from . import hardware_tools  # noqa: F401  硬件研发工具集（Verilog/Testbench 生成）
 
 from .registry import registry, ToolDefinition  # noqa: F401
 

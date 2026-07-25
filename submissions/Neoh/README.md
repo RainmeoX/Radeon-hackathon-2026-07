@@ -1,76 +1,65 @@
 # Radeon-Assistant
 
-> A fully local AI Agent system built on AMD Radeon GPU + ROCm, featuring RAG knowledge base, tool calling, multi-step task planning, and human-in-the-loop safety controls.
+A local AI agent system that runs on AMD Radeon GPUs via the ROCm software stack. Inference, embedding, and vector search all run on local hardware. This is a learning / development project built for AMD Radeon Hackathon 2026-07 (Track 2 — Private AI Agent Development & Local Deployment).
 
-**Track 2 — Private AI Agent Development & Local Deployment**
 **Team:** Neoh
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [Architecture](#architecture)
-- [Project Structure](#project-structure)
-- [Environment Requirements](#environment-requirements)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [AMD Radeon GPU Optimization](#amd-radeon-gpu-optimization)
-- [Safety & Privacy](#safety--privacy)
-- [Dependencies](#dependencies)
-- [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Overview
 
-Radeon-Assistant is a privacy-first AI agent that runs **entirely on local hardware** — no external API calls, no cloud dependencies. It leverages AMD Radeon GPUs via the ROCm software stack to accelerate large language model inference, embedding generation, and vector search.
+Radeon-Assistant combines a hand-written agent loop (Planner → Executor → Reflector) with a FAISS-backed RAG knowledge base, a registry of built-in tools, and human-in-the-loop approval for high-risk operations. All LLM inference runs locally on an AMD Radeon GPU through vLLM + ROCm — no external API is called during inference.
 
-The system combines a **Planner → Executor → Reflector** agent loop with a FAISS-backed RAG knowledge base, a registry of 12 built-in tools, and human-in-the-loop approval for high-risk operations. All activities are recorded in a JSON-Lines audit log for traceability.
+The project started as a general-purpose local agent framework. Hardware R&D usage scenarios were added later as a specialization layer (see *Hardware R&D specialization* below).
 
-### Application Scenarios
+### What it does
 
-- **Local knowledge base Q&A** — Upload private documents (PDF/DOCX/MD/TXT) and ask questions with source citations
-- **Office automation** — File operations, command execution, code interpretation via natural language
-- **Multi-step task planning** — Complex tasks are decomposed into executable steps with self-reflection
-- **Privacy-sensitive environments** — All inference stays on-device; suitable for confidential data
+- Local document Q&A over a private RAG knowledge base (PDF / DOCX / MD / TXT)
+- File / shell / Python / system operations via natural-language tool calls
+- Multi-step task planning with self-reflection and retry
+- Human-in-the-loop approval for high-risk operations, with a JSON-Lines audit log
+- (Specialized) hardware R&D assistance: hardware-domain system prompt, local Verilog / SystemVerilog module and testbench generation, and chip-datasheet table / pin extraction for the knowledge base
+
+### Scope / limitations (objective)
+
+- Verilog / testbench generation is LLM-based text generation; it is **not** connected to a simulator (e.g. iverilog) for automatic verification.
+- The hardware features are usage-scenario specializations on top of a general agent framework, not a from-scratch EDA engine.
+- Model selection (14B default) has not yet been backed by a systematic benchmark; 7B also runs.
 
 ---
 
-## Key Features
+## Key features
 
 | Feature | Implementation |
 |---------|---------------|
-| 🔒 100% Local Inference | Qwen2.5-7B-Instruct (FP16) via vLLM + ROCm |
-| 📚 RAG Knowledge Base | FAISS vector store + all-MiniLM-L6-v2 embeddings, supports PDF/DOCX/MD/TXT |
-| 🔧 Tool Calling | 12 built-in tools across file/shell/code/system categories |
-| 🧠 Multi-step Planning | Planner decomposes tasks → Executor runs → Reflector evaluates → retry if needed |
-| 🛡️ Human-in-the-loop | High-risk operations (delete, command exec, code exec) require explicit user approval |
-| 📝 Audit Logging | JSON-Lines audit log records all tool calls, approvals, tasks, and chat summaries |
-| 💾 Memory | Short-term conversation buffer (20 messages) + long-term vector retrieval |
-| 🖥️ Dual Interface | Streamlit Web UI + CLI mode |
+| Local inference | Qwen2.5 (14B-Instruct FP16 by default; 7B also tested) via vLLM + ROCm |
+| RAG knowledge base | FAISS (IndexFlatL2) + all-MiniLM-L6-v2 embeddings; PDF / DOCX / MD / TXT |
+| Tool calling | 14 built-in tools across file / shell / code / system / hardware categories |
+| Multi-step planning | Planner decomposes → Executor runs → Reflector evaluates → retry if needed |
+| Human-in-the-loop | High-risk operations (delete, command exec, code exec) require explicit approval |
+| Audit logging | JSON-Lines audit log records tool calls, approvals, tasks |
+| Memory | Short-term conversation buffer (20 messages) + long-term vector retrieval |
+| Interfaces | Streamlit Web UI + CLI |
 
 ---
 
 ## Architecture
 
-![Architecture](docs/architecture.png)
+The system is organized into layers:
 
-The system is organized into 7 layers:
+1. **User layer** — Streamlit Web UI and CLI entry points
+2. **Agent layer** — Planner (task decomposition) → Executor (step execution) → Reflector (result evaluation)
+3. **Safety layer** — human-in-the-loop approval gate + audit logger
+4. **Tool layer** — 14 registered tools (file / shell / code / system / hardware)
+5. **Memory layer** — short-term buffer + FAISS long-term vector store with document parser
+6. **Inference layer** — vLLM with ROCm backend, Qwen2.5 model
+7. **Hardware layer** — AMD Radeon GPU (tested on Radeon Pro W7900)
 
-1. **User Layer** — Streamlit Web UI and CLI entry points
-2. **Agent Layer** — Planner (task decomposition) → Executor (step execution) → Reflector (result evaluation)
-3. **Safety Layer** — Human-in-the-loop approval gate + audit logger
-4. **Tool Layer** — 12 registered tools (file/shell/code/system)
-5. **Memory Layer** — Short-term buffer + FAISS long-term vector store with document parser
-6. **Inference Layer** — vLLM with ROCm backend, Qwen2.5-7B-Instruct FP16 model
-7. **Hardware Layer** — AMD Radeon GPU (tested on RX 7900 XT / Radeon Pro W7900)
+> Architecture diagram: `docs/architecture.png` (if present in your checkout).
 
 ---
 
-## Project Structure
+## Project structure
 
 ```
 submissions/Neoh/
@@ -79,63 +68,69 @@ submissions/Neoh/
 │   ├── planner.py          # Task decomposition
 │   ├── executor.py         # Step execution with HITL approval
 │   ├── reflector.py        # Result evaluation
-│   └── audit.py            # Audit logger (JSON-Lines)
+│   ├── audit.py            # Audit logger (JSON-Lines)
+│   └── prompts.py          # System prompt templates (generic / hardware)
 ├── inference/              # LLM inference
 │   ├── engine.py           # vLLM wrapper
 │   └── model_loader.py     # Multi-source model downloader
 ├── memory/                 # Memory & RAG
 │   ├── manager.py          # Memory manager
 │   ├── vector_store.py     # FAISS vector store
-│   └── document_parser.py  # PDF/DOCX/MD/TXT parser
+│   └── document_parser.py  # PDF / DOCX / MD / TXT parser (tables extracted from PDF)
 ├── tools/                  # Tool registry
 │   ├── registry.py         # Tool registration center
-│   ├── file_tools.py       # File operations (5 tools)
-│   ├── shell_tools.py      # Command execution (2 tools)
-│   ├── code_tools.py       # Code interpreter (2 tools)
-│   └── system_tools.py     # System info (3 tools)
+│   ├── file_tools.py       # File operations
+│   ├── shell_tools.py      # Command execution
+│   ├── code_tools.py       # Code interpreter
+│   ├── system_tools.py     # System info
+│   └── hardware_tools.py   # Hardware R&D tools (Verilog / testbench generation)
 ├── ui/
 │   └── web_app.py          # Streamlit frontend
 ├── scripts/
 │   ├── download_model.py   # Model download CLI
-│   └── init_rag.py         # RAG initialization CLI
-├── docs/
-│   └── architecture.png    # Architecture diagram
-├── app.py                  # Entry point (web/cli)
+│   ├── init_rag.py         # General RAG initialization CLI
+│   └── init_hardware_rag.py # Hardware knowledge-base initialization CLI
+├── app.py                  # Entry point (web / cli)
 ├── config.yaml             # Configuration
 ├── requirements.txt        # Python dependencies
 ├── install_rocm.sh         # Linux install script
-├── install_rocm.bat        # Windows install script
 └── .gitignore
 ```
 
+> Tool counts: 5 file + 2 shell + 2 code + 3 system + 2 hardware = 14 registered tools.
+
 ---
 
-## Environment Requirements
+## Environment requirements
 
 ### Hardware
-- **GPU:** AMD Radeon RX 7900 XT / Radeon Pro W7900 (or any ROCm-supported Radeon)
-- **VRAM:** ≥ 16 GB (for Qwen2.5-7B FP16)
+
+- **GPU:** AMD Radeon Pro W7900 / RX 7900 series (or any ROCm-supported Radeon)
+- **VRAM:** ≥ 16 GB for Qwen2.5-7B FP16; ~30 GB for 14B FP16
 - **RAM:** ≥ 16 GB
-- **Storage:** ≥ 10 GB (for model + dependencies)
+- **Storage:** ≥ 10 GB (model + dependencies)
 
 ### Software
-- **OS:** Ubuntu 22.04+ / Windows 10+ (WSL2 recommended on Windows)
+
+- **OS:** Ubuntu 22.04+ (ROCm); Windows via WSL2
 - **Python:** 3.10 – 3.12
-- **ROCm:** 7.0+ (7.2.1 recommended)
-- **HIP toolkit:** included with ROCm
+- **ROCm:** 7.0+ (7.2.1 used in testing)
+- **vLLM:** ROCm pre-built wheel
+
+> **Note on gfx1100:** W7900 / RX 7900 are gfx1100. vLLM must be told to recognize them via `HSA_OVERRIDE_GFX_VERSION=11.0.0` (set automatically in `app.py` / `engine.py`). Windows desktop cannot run ROCm inference — use Linux + AMD GPU (e.g. Radeon Cloud).
 
 ---
 
 ## Installation
 
-### Step 1: Clone the repository
+### Step 1: Clone
 
 ```bash
 git clone https://github.com/RainmeoX/Radeon-hackathon-2026-07.git
 cd Radeon-hackathon-2026-07/submissions/Neoh
 ```
 
-### Step 2: Create virtual environment
+### Step 2: Virtual environment
 
 ```bash
 python -m venv venv
@@ -143,45 +138,27 @@ source venv/bin/activate        # Linux
 # venv\Scripts\activate         # Windows
 ```
 
-### Step 3: Install vLLM (ROCm pre-built wheel)
+### Step 3: Install vLLM (ROCm wheel)
 
-**Linux:**
 ```bash
-bash install_rocm.sh
+bash install_rocm.sh        # Linux / WSL2
 ```
 
-**Windows (WSL2):**
-```bat
-install_rocm.bat
-```
-
-The install script will:
-1. Install Python dependencies from `requirements.txt`
-2. Set `CMAKE_ARGS="-DGGML_HIPBLAS=ON"` for ROCm compilation
-3. Install `vLLM` using the official ROCm pre-built wheel (no compilation needed)
-4. Verify the installation
+Installs dependencies and `vllm` from the official ROCm pre-built wheel.
 
 ### Step 4: Download the model
 
 ```bash
-python scripts/download_model.py --model qwen2.5-7b
+python scripts/download_model.py --model qwen2.5-14b
 ```
 
-The downloader supports multiple sources with automatic fallback:
-- HuggingFace Hub (primary)
-- hf-mirror.com (China mirror)
-- ModelScope (alternative)
-- curl / aria2c (direct download)
+Supports HuggingFace Hub / hf-mirror / ModelScope with fallback. Model saved to `./models/Qwen2.5-14B-Instruct/`.
 
-Model files will be saved to `./models/Qwen2.5-7B-Instruct/` (~15 GB, safetensors format).
-
-### Step 5: (Optional) Initialize RAG knowledge base
+### Step 5: (Optional) Initialize RAG
 
 ```bash
-# Place your documents in ./data/documents/
 mkdir -p data/documents
 # cp your.pdf your.docx your.md data/documents/
-
 python scripts/init_rag.py
 ```
 
@@ -189,33 +166,26 @@ python scripts/init_rag.py
 
 ## Configuration
 
-Edit `config.yaml` to customize the system:
+Edit `config.yaml`. Notable fields:
 
 ```yaml
 model:
-  path: "./models/Qwen2.5-7B-Instruct"
-  engine: vllm            # vLLM engine
-  n_ctx: 8192             # Context window
-  gpu_memory_utilization: 0.90  # GPU memory usage ratio
+  path: "./models/Qwen2.5-14B-Instruct"   # 7B also works
+  engine: vllm
+  n_ctx: 8192
+  gpu_memory_utilization: 0.90
   temperature: 0.7
   max_tokens: 4096
 
 agent:
-  max_iterations: 10      # Max planning iterations
+  max_iterations: 10
   memory_enabled: true
-  tools:                  # 12 registered tools
-    - read_file
-    - write_file
-    - delete_file
-    - list_directory
-    - create_directory
-    - execute_command
-    - execute_python
-    - code_interpreter
-    - format_code
-    - get_system_info
-    - get_gpu_info
-    - get_process_list
+  prompt_template: "hardware"   # "hardware" (default) or "generic"
+  tools:
+    - read_file / write_file / delete_file / list_directory / create_directory
+    - execute_command / execute_python / code_interpreter / format_code
+    - get_system_info / get_gpu_info / get_process_list
+    - generate_verilog / generate_testbench   # hardware specialization
 
 rag:
   vector_store: "faiss"
@@ -226,180 +196,69 @@ rag:
 
 security:
   audit_log_enabled: true
-  require_approval_for:   # High-risk tools requiring user approval
-    - delete_file
-    - execute_command
-    - execute_python
-    - code_interpreter
+  require_approval_for: [delete_file, write_file, execute_command, execute_python, code_interpreter]
 ```
 
 ---
 
 ## Usage
 
-### Web UI mode (recommended)
+### Web UI
 
 ```bash
 python app.py --mode web --port 7860
 ```
 
-Open `http://localhost:7860` in your browser. Features:
-- Chat interface with RAG context
-- Document upload (auto-indexed into FAISS)
-- Conversation history
-- Model reload button
+Open `http://localhost:7860`. Chat with RAG context, upload documents, view history.
 
-### CLI mode
+### CLI
 
 ```bash
 python app.py --mode cli
 ```
 
-Interactive commands:
-- Type any message for a chat response
-- `task <description>` — execute a multi-step task with planning
-- `quit` / `exit` — exit
+- Type a message for chat.
+- `task <description>` — run a multi-step planned task.
+- `quit` / `exit` — leave.
 
-### Example: Multi-step task
+### Hardware R&D specialization
 
-```
-你: task 读取 config.yaml 的内容并统计文件行数
-
-正在执行任务...
-步骤 1: read_file(file_path="config.yaml")
-步骤 2: execute_python(code="print(len(open('config.yaml').readlines()))")
-
-任务结果: 完成
-评估: 成功读取文件并统计行数
-```
-
-When a high-risk tool is invoked, you will be prompted:
-
-```
-==================================================
-⚠️  High-risk operation approval
-Tool: execute_python
-Args: {'code': 'print(len(...))'}
-Description: Count lines in config.yaml
-==================================================
-Approve execution? (y/n):
-```
-
----
-
-## AMD Radeon GPU Optimization
-
-### Inference acceleration
-
-| Optimization | Value | Effect |
-|--------------|-------|--------|
-| Full GPU offload | vLLM automatic | All model layers offloaded to VRAM |
-| PagedAttention | vLLM built-in | Efficient KV cache management for higher throughput |
-| HIPBLAS backend | `-DGGML_HIPBLAS=ON` | Native ROCm matrix operations |
-| Flash Attention | `-DLLAMA_FLASH_ATTN=ON` | Reduced KV cache memory |
-| Precision | FP16 | Full precision inference, best quality |
-
-### Build from source (optional)
-
-vLLM ships with pre-built ROCm wheels — no source compilation needed. The `install_rocm.sh` / `install_rocm.bat` script handles everything.
+Set `agent.prompt_template: "hardware"` (default) so the agent answers in a hardware-R&D framing and cites datasheet sources by name. To build a hardware knowledge base:
 
 ```bash
-# (No manual compilation needed)
-
-mkdir build && cd build
-cmake .. -DGGML_HIPBLAS=ON -DLLAMA_FLASH_ATTN=ON -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+mkdir -p data/hardware_documents
+# cp your datasheets / reference manuals / errata here
+python scripts/init_hardware_rag.py
 ```
 
-### Expected performance
-
-| GPU | Model | TTFT | Generation Speed | VRAM |
-|-----|-------|------|------------------|------|
-| Radeon Pro W7900 | Qwen2.5-14B FP16 | ~0.4s | **27.5 tokens/s** (measured) | ~30 GB |
-| Radeon Pro W7900 | Qwen2.5-7B FP16 | ~0.4s | **46 tokens/s** (measured) | ~15 GB |
-| Radeon RX 7900 XT | Qwen2.5-7B FP16 | ~0.5s | ~85 tokens/s (estimated) | ~15 GB |
-
-> Performance numbers measured on AMD Radeon Cloud (Radeon PRO W7900, 48GB VRAM, single GPU, ROCm 7.2.1, vLLM 0.25.1).
+PDF tables (pin tables, parameter tables) are extracted and indexed so they become searchable. The `generate_verilog` / `generate_testbench` tools let the planner produce Verilog / SystemVerilog modules and testbenches locally (written to `./generated/`).
 
 ---
 
-## Safety & Privacy
+## AMD Radeon GPU notes
 
-### Privacy guarantees
-- ✅ **Zero data egress** — All LLM inference, embedding, and vector search run locally
-- ✅ **No telemetry** — No usage data is collected or transmitted
-- ✅ **Offline capable** — After model download, no internet connection required
+| GPU | Model | Generation speed | VRAM |
+|-----|-------|------------------|------|
+| Radeon Pro W7900 | Qwen2.5-14B FP16 | ~27.5 tokens/s (measured) | ~30 GB |
+| Radeon Pro W7900 | Qwen2.5-7B FP16 | ~46 tokens/s (measured) | ~15 GB |
 
-### Human-in-the-loop approval
-High-risk tools are flagged with `requires_approval=True` in the tool registry. The Executor pauses before invoking them and prompts the user for explicit confirmation. Currently flagged tools:
-- `delete_file` — permanent file deletion
-- `execute_command` — arbitrary shell command execution
-- `execute_python` — arbitrary Python code execution
-- `code_interpreter` — in-process code execution
+Measured on AMD Radeon Cloud (Radeon Pro W7900, 48 GB VRAM, single GPU, ROCm 7.2.1, vLLM 0.25.1).
 
-### Audit logging
-All significant events are recorded in `logs/audit.log` (JSON Lines format):
+---
 
-```json
-{"timestamp":"2026-07-18T12:34:56.789","event":"approval","tool":"delete_file","arguments":{"file_path":"/tmp/test.txt"},"approved":false,"step":1}
-{"timestamp":"2026-07-18T12:34:57.123","event":"tool_call","tool":"read_file","arguments":{"file_path":"config.yaml"},"success":true,"output_summary":"...","step":2}
-{"timestamp":"2026-07-18T12:35:00.456","event":"task","task":"Read config and count lines","success":true,"step_count":2,"reflection":{"completed":true,"reason":"..."}}
-```
+## Safety & privacy
 
-Chat messages are logged as length summaries only (not full content) to protect conversational privacy.
+- All LLM inference, embedding, and vector search run locally on the AMD GPU; no external API is called during inference.
+- High-risk tools (`delete_file`, `write_file`, `execute_command`, `execute_python`, `code_interpreter`) pause for explicit user approval before execution.
+- Significant events are recorded in `logs/audit.log` (JSON Lines). Chat content is logged as length summaries only.
 
 ---
 
 ## Dependencies
 
-See `requirements.txt` for the complete list. Key dependencies:
-
-| Package | Purpose |
-|---------|---------|
-| vllm | LLM inference (ROCm pre-built wheel) |
-| faiss-cpu | Vector similarity search |
-| sentence-transformers | Embedding model runtime |
-| streamlit | Web UI |
-| pdfplumber | PDF parsing |
-| python-docx | DOCX parsing |
-| psutil | System monitoring |
-| pydantic | Config & tool definition validation |
-| pyyaml | YAML config loading |
+See `requirements.txt`. Key packages: `vllm` (ROCm wheel), `faiss`, `sentence-transformers`, `streamlit`, `pdfplumber`, `python-docx`, `psutil`, `pydantic`, `pyyaml`.
 
 > **Note:** `vllm` is installed via `install_rocm.sh` / `install_rocm.bat` using the official ROCm wheel repository (`https://wheels.vllm.ai/rocm/`).
-
----
-
-## Troubleshooting
-
-### Model download fails
-The downloader tries multiple mirrors. If all fail:
-1. Manually download from https://www.modelscope.cn/models/Qwen/Qwen2.5-7B-Instruct
-2. Extract to `./models/Qwen2.5-7B-Instruct/`
-
-### GPU not detected
-```bash
-# Verify ROCm installation
-rocm-smi
-# Should list your Radeon GPU
-
-# Verify HIP_PATH
-echo $HIP_PATH
-# Should point to /opt/rocm/hip (Linux)
-```
-
-### Out of memory
-- Reduce `n_ctx` in `config.yaml` (e.g., 4096)
-- Reduce `gpu_memory_utilization` in `config.yaml` (e.g., 0.80)
-- Use a smaller model (Qwen2.5-3B-Instruct)
-
-### Tools not working
-Ensure `tools/__init__.py` imports all tool modules. The registry should contain 12 tools at startup. Verify with:
-```python
-import tools
-from tools.registry import registry
-print(len(registry.list_tools()))  # Should print 12
-```
 
 ---
 

@@ -1,11 +1,11 @@
-"""下载 Qwen2.5-7B-Instruct 模型（safetensors 格式，vLLM 使用）。
+"""下载 Qwen2.5 模型（safetensors 格式，vLLM 使用）。默认 14B，可用 --model 切换 7B。
 
 支持多源下载：
 1. ModelScope（国内最快，推荐）
 2. HuggingFace + hf-mirror
 3. HuggingFace 官方
 
-下载的是完整 safetensors 权重（约 15GB），vLLM 直接加载。
+下载的是完整 safetensors 权重（14B FP16 约 28GB，7B 约 15GB），vLLM 直接加载。
 """
 
 import argparse
@@ -135,7 +135,7 @@ def main():
     parser.add_argument(
         "--model",
         type=str,
-        default="qwen2.5-7b",
+        default="qwen2.5-14b",
         choices=["qwen2.5-7b", "qwen2.5-14b"],
         help="模型名称"
     )

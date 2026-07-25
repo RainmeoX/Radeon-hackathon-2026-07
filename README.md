@@ -22,10 +22,14 @@ AMD Radeon 黑客松参赛仓库（fork 自官方模板）。
 
 ## 我的提交
 
-- **参加 Track**：（待填 —— 我参加的是哪个 Track）
-- **项目简介**：（待填 —— 做了什么、用在哪张 AMD 显卡上）
-- **Demo / 代码位置**：（待填 —— 子目录或链接）
+- **参加 Track**：Track 2 · 私有 AI Agent 开发与本地部署
+- **项目简介**：Radeon-Assistant（对外作品名「磐石」）。一个基于 AMD Radeon GPU + ROCm 的**本地私有 AI Agent 系统**，定位为学习 / 开发阶段作品。推理全程在本地 GPU 完成，支持本地知识库（RAG）、工具调用、多步任务规划，以及高危操作的人工审批与审计日志。近期补充了面向**硬件研发**的使用场景特化（硬件领域 system prompt、Verilog/Testbench 本地生成工具、芯片手册 PDF 表格 / 引脚解析）。
+- **用的显卡**：AMD Radeon Pro W7900（Radeon Cloud，单卡 48GB）
+- **Demo / 代码位置**：`submissions/Neoh/`（说明见该目录 README.md）
 
 ## Reflection
 
-（参赛复盘待写：踩了哪些坑、AMD ROCm 上跑通的体验、下次怎么改进）
+- **ROCm 跑通体验**：在 Radeon Cloud 的 W7900 上用 vLLM + ROCm 7.2.1 跑通了 Qwen2.5（14B / 7B FP16）。W7900 / RX7900 属 gfx1100，需在 vLLM 前设置 `HSA_OVERRIDE_GFX_VERSION=11.0.0` 才能被识别。实测 14B 约 27.5 tok/s、7B 约 46 tok/s。
+- **踩的坑**：① 消费级 / 专业卡 gfx1100 不被 vLLM 官方 wheel 默认识别，必须 override GFX 版本；② 多卡张量并行（TP）必须用 spawn 启动；③ Windows 桌面环境无法跑 ROCm 推理，需 Linux + AMD GPU（本地开发靠 Radeon Cloud）。
+- **当前局限（客观）**：模型选型 14B 还缺系统的对比评测数据；Verilog / Testbench 目前是 LLM 轻量生成（不接 iverilog 等仿真器做自动验证）；硬件能力属于「使用场景特化」，并非从零自研的 EDA 引擎。
+- **下次改进**：补 7B / 14B / 32B 小评测作为选型依据；考虑接 iverilog 做生成代码的仿真自检；把更多真实芯片手册纳入硬件知识库。

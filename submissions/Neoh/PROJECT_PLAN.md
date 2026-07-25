@@ -29,7 +29,7 @@
 
 | 组件 | 选型 | 版本 | 用途 |
 |------|------|------|------|
-| 基础大模型 | Qwen2.5-7B-Instruct | FP16 (safetensors) | 核心推理、任务规划、工具调用决策 |
+| 基础大模型 | Qwen2.5-14B-Instruct (默认) / 7B (轻量备选) | FP16 safetensors 目录 | 核心推理、任务规划、工具调用决策 |
 | Embedding 模型 | all-MiniLM-L6-v2 | - | 文档向量化、语义检索 |
 | 向量数据库 | FAISS | 1.8.0 | 本地向量存储与相似度检索 |
 
@@ -37,7 +37,7 @@
 
 | 功能 | 实现方式 | GPU加速 | 说明 |
 |------|---------|---------|------|
-| 自然语言理解 | Qwen2.5-7B | ✅ | 理解用户意图和上下文 |
+| 自然语言理解 | Qwen2.5-14B | ✅ | 理解用户意图和上下文 |
 | 多步骤任务规划 | LLM 链式推理 | ✅ | 将复杂任务分解为可执行步骤 |
 | 工具调用决策 | ReAct 模式 | ✅ | 判断何时调用工具及调用哪个 |
 | 文档向量化 | all-MiniLM-L6-v2 | ✅ | 将文本转为向量表示 |
@@ -48,7 +48,7 @@
 
 ```yaml
 model:
-  path: "./models/qwen2.5-7b-instruct-q4_k_m.gguf"
+  path: "./models/Qwen2.5-14B-Instruct"  # vLLM 加载 safetensors 目录（7B 轻量备选：Qwen2.5-7B-Instruct）
   engine: vllm            # vLLM 推理引擎
   n_ctx: 8192             # 上下文窗口大小
   gpu_memory_utilization: 0.90  # GPU 显存占用比例
@@ -240,7 +240,7 @@ submissions/Neoh/
 ### 5.3 知识注入策略
 
 ```
-预训练模型 (Qwen2.5-7B) + RAG (私有文档) → 领域专家 Agent
+预训练模型 (Qwen2.5-14B) + RAG (私有文档) → 领域专家 Agent
      │                    │
      │              用户上传文档
      │              (PDF/Word/MD/TXT)

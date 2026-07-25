@@ -1,5 +1,6 @@
 import logging
 import subprocess
+import sys
 from typing import Dict, Any
 from .registry import ToolDefinition, registry
 
@@ -31,7 +32,7 @@ def execute_command(command: str, timeout: int = 60) -> Dict[str, Any]:
 def execute_python(code: str) -> Dict[str, Any]:
     try:
         result = subprocess.run(
-            ["python", "-c", code],
+            [sys.executable, "-c", code],
             capture_output=True,
             text=True,
             timeout=60,

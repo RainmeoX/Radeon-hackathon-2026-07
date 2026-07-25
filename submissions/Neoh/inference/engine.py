@@ -1,7 +1,7 @@
 """vLLM 推理引擎封装。
 
-使用 vLLM 在 AMD Radeon GPU (ROCm) 上运行 Qwen2.5-7B-Instruct。
-vLLM 提供 PagedAttention + 连续批处理，性能优于 llama.cpp。
+使用 vLLM 在 AMD Radeon GPU (ROCm) 上运行 Qwen2.5-14B-Instruct（7B 轻量备选）。
+vLLM 提供 PagedAttention + 连续批处理。
 
 API 与原 llama_cpp 版本保持兼容：
 - generate(prompt, **kwargs) -> str

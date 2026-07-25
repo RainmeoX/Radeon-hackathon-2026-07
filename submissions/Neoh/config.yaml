@@ -16,6 +16,8 @@ model:
 agent:
   max_iterations: 10
   memory_enabled: true
+  # system prompt 模式: hardware（磐石硬件研发定位，默认）/ generic（通用本地助手）
+  prompt_template: "hardware"
   # 工具名必须与 tools/*.py 中 registry.register_tool(name=...) 一致
   tools:
     - read_file
@@ -30,6 +32,9 @@ agent:
     - get_system_info
     - get_gpu_info
     - get_process_list
+    # 硬件研发特化工具（路径 B）
+    - generate_verilog
+    - generate_testbench
 
 rag:
   vector_store: "faiss"
@@ -47,6 +52,7 @@ security:
   # 高危操作需用户审批（与 tools/*.py 中 requires_approval=True 对应）
   require_approval_for:
     - delete_file
+    - write_file
     - execute_command
     - execute_python
     - code_interpreter

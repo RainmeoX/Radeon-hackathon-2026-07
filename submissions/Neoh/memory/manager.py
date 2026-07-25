@@ -26,20 +26,22 @@ class MemoryManager:
         self.top_k = top_k
         self.short_term_memory: List[Dict[str, str]] = []
 
-    def add_document(self, file_path: str) -> int:
+    def add_document(self, file_path: str, metadata_extra: Optional[Dict[str, Any]] = None) -> int:
         logger.info(f"Processing document: {file_path}")
-        documents = self.document_parser.process_file(file_path)
-        
+        documents = self.document_parser.process_file(file_path, metadata_extra=metadata_extra)
+
         if documents:
             self.vector_store.add_documents(documents)
             logger.info(f"Added {len(documents)} chunks from {file_path}")
             return len(documents)
         return 0
 
-    def add_documents(self, file_paths: List[str]) -> int:
+    def add_documents(
+        self, file_paths: List[str], metadata_extra: Optional[Dict[str, Any]] = None
+    ) -> int:
         total_added = 0
         for file_path in file_paths:
-            added = self.add_document(file_path)
+            added = self.add_document(file_path, metadata_extra=metadata_extra)
             total_added += added
         return total_added
 

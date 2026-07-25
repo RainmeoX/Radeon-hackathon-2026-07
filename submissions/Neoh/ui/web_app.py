@@ -36,7 +36,7 @@ def init_engine():
     
     model_config = config.get("model", {})
     inference_config = InferenceConfig(
-        model_path=model_config.get("path", "./models/Qwen2.5-7B-Instruct"),
+        model_path=model_config.get("path", "./models/Qwen2.5-14B-Instruct"),
         n_ctx=model_config.get("n_ctx", 8192),
         temperature=model_config.get("temperature", 0.7),
         max_tokens=model_config.get("max_tokens", 4096),
@@ -46,6 +46,12 @@ def init_engine():
         pipeline_parallel_size=model_config.get("pipeline_parallel_size", 1),
     )
     
+    if not os.path.exists(inference_config.model_path):
+        raise RuntimeError(
+            f"模型未找到: {inference_config.model_path}\n"
+            f"请先运行: python scripts/download_model.py --model qwen2.5-14b"
+        )
+
     engine = InferenceEngine(inference_config)
     return engine
 
@@ -65,7 +71,20 @@ def init_memory():
 def init_agent():
     engine = init_engine()
     memory_manager = init_memory()
-    agent = RadeonAgent(engine, memory_manager)
+
+    # 读取 config.yaml 中的 system prompt 模式（hardware / generic）
+    prompt_mode = "hardware"
+    try:
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.yaml"
+        )
+        with open(config_path, "r", encoding="utf-8") as f:
+            _cfg = yaml.safe_load(f)
+        prompt_mode = _cfg.get("agent", {}).get("prompt_template", "hardware")
+    except Exception:
+        pass
+
+    agent = RadeonAgent(engine, memory_manager, prompt_mode=prompt_mode)
     return agent
 
 st.title("🤖 AMD Radeon 本地智能体系统")
@@ -96,7 +115,8 @@ with st.sidebar:
             os.makedirs(save_dir, exist_ok=True)
             
             for uploaded_file in uploaded_files:
-                file_path = os.path.join(save_dir, uploaded_file.name)
+                safe_name = os.path.basename(uploaded_file.name)
+                file_path = os.path.join(save_dir, safe_name)
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 

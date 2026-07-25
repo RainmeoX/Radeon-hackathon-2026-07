@@ -80,7 +80,7 @@ def run_cli():
         
         model_config = config.get("model", {})
         inference_config = InferenceConfig(
-            model_path=model_config.get("path", "./models/Qwen2.5-7B-Instruct"),
+            model_path=model_config.get("path", "./models/Qwen2.5-14B-Instruct"),
             n_ctx=model_config.get("n_ctx", 8192),
             temperature=model_config.get("temperature", 0.7),
             max_tokens=model_config.get("max_tokens", 4096),
@@ -90,9 +90,20 @@ def run_cli():
             pipeline_parallel_size=model_config.get("pipeline_parallel_size", 1),
         )
         
+        model_path = inference_config.model_path
+        if not os.path.exists(model_path):
+            logger.error(f"模型未找到: {model_path}")
+            logger.error("请先运行: python scripts/download_model.py --model qwen2.5-14b")
+            sys.exit(1)
+
         engine = InferenceEngine(inference_config)
         memory_manager = MemoryManager()
-        agent = RadeonAgent(engine, memory_manager)
+        agent_config = config.get("agent", {})
+        agent = RadeonAgent(
+            engine,
+            memory_manager,
+            prompt_mode=agent_config.get("prompt_template", "hardware"),
+        )
         
         logger.info("Agent initialized successfully")
         print("\n🤖 Radeon-Assistant CLI")

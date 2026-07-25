@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 def get_system_info() -> Dict[str, Any]:
     try:
-        cpu_percent = psutil.cpu_percent(interval=1)
+        cpu_percent = psutil.cpu_percent(interval=None)
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage("/")
         
@@ -45,6 +45,7 @@ def get_gpu_info() -> Dict[str, Any]:
             ["rocm-smi", "--showproductname", "--showmeminfo", "vram"],
             capture_output=True,
             text=True,
+            timeout=10,
         )
         
         if result.returncode == 0:

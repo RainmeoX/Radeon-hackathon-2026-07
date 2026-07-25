@@ -27,7 +27,7 @@ class Planner:
 - 不要输出 ```json 标记
 - 不要输出解释文字
 - tool 为 null 表示不需要工具
-- 最多 3 个步骤
+- 最多 5 个步骤
 - 只输出 JSON 数组本身"""
 
         response = self.engine.generate(prompt, max_tokens=500)

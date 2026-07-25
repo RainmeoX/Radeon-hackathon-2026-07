@@ -88,7 +88,7 @@ registry.register_tool(ToolDefinition(
         "append": {"type": "boolean", "description": "是否追加模式"},
     },
     function=write_file,
-    requires_approval=False,
+    requires_approval=True,
 ))
 
 registry.register_tool(ToolDefinition(

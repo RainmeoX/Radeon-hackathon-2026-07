@@ -54,7 +54,7 @@ class ToolRegistry:
             return result
         except Exception as e:
             logger.error(f"Tool {name} failed: {str(e)}")
-            return {"error": str(e)}
+            return {"success": False, "error": str(e)}
 
     def get_approved_tools(self) -> List[str]:
         return [name for name, tool in self.tools.items() if not tool.requires_approval]
