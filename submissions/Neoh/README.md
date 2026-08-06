@@ -288,6 +288,9 @@ Functional test reports covering the agent loop, RAG, tool calling, hardware R&D
 - English: [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md)
 - 中文：[`docs/TEST_REPORT.zh-CN.md`](docs/TEST_REPORT.zh-CN.md)
 
+##Demo video
+https://t.bilibili.com/1233490160518168609?share_source=pc_native
+
 A throughput / latency benchmark on the Radeon Pro W7900 is also recorded in [`docs/benchmark_qwen2.5-14b.md`](docs/benchmark_qwen2.5-14b.md).
 
 ---
