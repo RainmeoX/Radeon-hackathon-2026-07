@@ -98,25 +98,28 @@ VARS = """
 """.format(**_p)
 
 CSS = "<style>\n" + VARS + """
-#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; }
+/* 彻底隐藏 Streamlit 默认头部/页脚，避免占位导致内容整体上移 */
+#MainMenu, footer, header[data-testid="stHeader"] { display: none !important; }
 
 /* 应用底 / 侧栏背景层 */
 .stApp { background: var(--bg-app) !important; color: var(--text) !important; }
 
-/* 主对话列：比背景亮一号，有左右边界（ChatGPT 风格居中列） */
+/* 主对话列：比背景亮一号，有左右边界（居中列） */
 .block-container {
     max-width: 920px;
     margin: 0 auto;
     padding-top: 0;
-    padding-bottom: 120px;
-    min-height: 100vh;
+    padding-bottom: 24px;
     background: var(--bg-main) !important;
     border-left: 1px solid var(--border) !important;
     border-right: 1px solid var(--border) !important;
 }
 
-/* 顶部品牌栏：清晰分隔，仅品牌名（无标语） */
+/* 顶部品牌栏：常驻顶部，清晰分隔，仅品牌名（无标语） */
 .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border);
     color: var(--text);
