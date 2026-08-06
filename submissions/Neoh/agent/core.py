@@ -34,13 +34,21 @@ class RadeonAgent:
         # 把推理引擎注入硬件生成工具（Verilog/Testbench），保持工具无状态契约
         set_engine(engine)
 
-    def chat(self, message: str, use_rag: bool = True, prompt_mode: str = None) -> str:
+    def chat(self, message: str, use_rag: bool = True, prompt_mode: str = None,
+             return_sources: bool = False):
         context = ""
-        
+        sources = []
+
         if self.memory_manager and use_rag:
-            rag_context = self.memory_manager.get_context(message)
-            if rag_context:
-                context = f"参考文档:\n{rag_context}\n\n"
+            results = self.memory_manager.search(message)
+            if results:
+                context_parts = []
+                for i, r in enumerate(results):
+                    context_parts.append(f"[参考文档 {i + 1}]\n{r['content']}\n")
+                    meta = r.get("metadata", {}) or {}
+                    src = meta.get("source") or meta.get("file") or f"document {i + 1}"
+                    sources.append({"index": i + 1, "source": src, "content": r["content"]})
+                context = "参考文档:\n" + "\n".join(context_parts)
 
         short_term_memory = self.memory_manager.get_short_term_memory() if self.memory_manager else []
         
@@ -72,6 +80,8 @@ class RadeonAgent:
         # 审计日志：记录对话（仅摘要，保护隐私）
         audit_logger.log_chat(message=message, response=response, used_rag=bool(context))
 
+        if return_sources:
+            return response, sources
         return response
 
     def run_task(self, task: str) -> Dict[str, Any]:

@@ -45,7 +45,7 @@ rag:
 
 ui:
   port: 7860
-  title: "AMD Radeon 本地智能体系统"
+  title: "Bedrock · Hardware R&D Assistant"
 
 security:
   audit_log_enabled: true

@@ -9,6 +9,9 @@
 # ---- 其他 AI 工具的临时规划目录（非项目交付物）----
 .trae/
 
+# ---- Radeon Cloud 一键启动运行时产物（非交付物，禁止上库）----
+.amd-oneclick-source
+
 # ---- Python ----
 __pycache__/
 *.py[cod]
