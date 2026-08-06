@@ -164,7 +164,7 @@ def run_cli():
                     print(f"\n执行步骤数: {len(steps)}")
                     for i, (s, r) in enumerate(zip(steps, results)):
                         tool = s.get('tool') or '无'
-                        success = '' if r.get('success') else ''
+                        success = '✅' if r.get('success') else '❌'
                         print(f" 步骤{i+1}: {s.get('description','')[:40]} | 工具: {tool} {success}")
                 print(f"{'='*50}")
             else:
