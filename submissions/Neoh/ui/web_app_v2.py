@@ -88,12 +88,42 @@ init_state()
 # ============================================================
 # 真实后端接入：InferenceEngine + MemoryManager + RadeonAgent
 # ============================================================
-import tools  # noqa: F401  导入即触发所有工具注册到 registry
-from inference.engine import InferenceEngine, InferenceConfig
-from memory.manager import MemoryManager
-from agent.core import RadeonAgent
-from agent.audit import audit_logger
-from agent.prompts import get_system_prompt
+# 重依赖（vllm / sentence_transformers / torch）在无 GPU 环境会 import 失败，
+# 用 try/except 保护，失败时设 None，让 api_respond() 自动降级到 _vllm_respond（纯 urllib 调 GLM API）。
+try:
+    import tools  # noqa: F401  导入即触发所有工具注册到 registry
+except Exception as _e:
+    print(f"[warn] tools import failed (non-fatal, will use API fallback): {_e}")
+
+try:
+    from inference.engine import InferenceEngine, InferenceConfig
+except Exception as _e:
+    InferenceEngine = InferenceConfig = None
+    print(f"[warn] inference.engine import failed (non-fatal): {_e}")
+
+try:
+    from memory.manager import MemoryManager
+except Exception as _e:
+    MemoryManager = None
+    print(f"[warn] memory.manager import failed (non-fatal): {_e}")
+
+try:
+    from agent.core import RadeonAgent
+except Exception as _e:
+    RadeonAgent = None
+    print(f"[warn] agent.core import failed (non-fatal): {_e}")
+
+try:
+    from agent.audit import audit_logger
+except Exception as _e:
+    audit_logger = None
+    print(f"[warn] agent.audit import failed (non-fatal): {_e}")
+
+try:
+    from agent.prompts import get_system_prompt
+except Exception as _e:
+    get_system_prompt = None
+    print(f"[warn] agent.prompts import failed (non-fatal): {_e}")
 
 
 @st.cache_resource
@@ -147,7 +177,8 @@ def init_memory():
 
 def web_approval_callback(tool_name: str, arguments: dict, description: str) -> bool:
     """Web 模式审批回调：演示场景自动放行（拦截决策仍写审计日志）。"""
-    audit_logger.log_tool_call(tool_name, arguments, approved=True, auto=True)
+    if audit_logger is not None:
+        audit_logger.log_tool_call(tool_name, arguments, approved=True, auto=True)
     return True
 
 
@@ -315,6 +346,7 @@ SYSTEM_PROMPT = (
 
 def _agent_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
     """通过 RadeonAgent 响应：Chat 模式走 RAG 对话，Agent 模式走工具调用链。"""
+    print(f"[debug] _agent_respond called, RadeonAgent={RadeonAgent}", flush=True)
     agent = init_agent()
     st.session_state.model_loaded = True
 
@@ -398,13 +430,18 @@ def api_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
     """真实后端响应：Agent 优先 → vLLM API 降级 → 抛异常由上层回退 mock。"""
     # 优先尝试 Agent（完整功能：RAG + 工具调用）
     try:
+        print(f"[debug] api_respond: trying _agent_respond first", flush=True)
         return _agent_respond(user_input, mode, rag)
     except Exception as e:
+        print(f"[debug] api_respond: _agent_respond failed ({e}), trying _vllm_respond", flush=True)
         # Agent 不可用（无 GPU / 无模型），降级到 vLLM API
         try:
-            return _vllm_respond(user_input, mode, rag)
-        except Exception:
-            raise RuntimeError(f"Agent and vLLM API both failed: {e}")
+            r = _vllm_respond(user_input, mode, rag)
+            print(f"[debug] api_respond: _vllm_respond OK, content[:60]={r.get('content','')[:60]}", flush=True)
+            return r
+        except Exception as e2:
+            print(f"[debug] api_respond: _vllm_respond ALSO failed: {e2}", flush=True)
+            raise RuntimeError(f"Agent and vLLM API both failed: {e} / {e2}")
 
 
 # ============================================================
@@ -961,7 +998,9 @@ def process_response():
     # 调用真实后端（失败回退 mock，保证 UI 不崩）
     try:
         result = api_respond(user_input, st.session_state.mode, st.session_state.rag_enabled)
-    except Exception:
+        print(f"[debug] api_respond OK, content[:80]={result.get('content','')[:80]}", flush=True)
+    except Exception as _e:
+        print(f"[debug] api_respond FAILED, falling back to mock: {_e}", flush=True)
         result = mock_respond(user_input, st.session_state.mode, st.session_state.rag_enabled)
 
     # 逐字流式（简化：直接填充完整内容，加光标）
