@@ -28,9 +28,10 @@ SHIM="$VENV/lib/libisoc23_shim.so"
 if [ ! -f "$SHIM" ]; then
   echo "[setenv-rocm] 警告: glibc shim 不存在: $SHIM" >&2
   echo "[setenv-rocm] 请先运行: bash install_rocm.sh" >&2
+  echo "[setenv-rocm] 跳过 LD_PRELOAD（vLLM/torch 可能因 glibc 2.35 缺少符号而报错）" >&2
+else
+  export LD_PRELOAD="$SHIM"
 fi
-
-export LD_PRELOAD="$SHIM"
 export HSA_OVERRIDE_GFX_VERSION=11.0.0
 export PYTORCH_ROCM_ARCH=gfx1100
 export FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE

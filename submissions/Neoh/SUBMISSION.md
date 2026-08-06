@@ -50,7 +50,7 @@ Generator: [`scripts/generate_spec.py`](scripts/generate_spec.py)
 
 | Status | Note |
 |---|---|
-| Pending | Recorder scripts ready in [`workspace/scripts/demo_session.py`](workspace/scripts/demo_session.py) and [`workspace/scripts/cast_to_mp4.py`](workspace/scripts/cast_to_mp4.py). Final rendered video will be committed as `demo.mp4` at the repository root once WebUI testing and GPU scheduling allow a fresh recording. |
+| Ready | [`demo.mp4`](demo.mp4) — 3 min 51 s walkthrough covering CLI, Web UI (ChatGPT-style), RAG document Q&A, Agent task with tool calls, and Verilog generation + iverilog simulation. |
 
 ### 4. Supplementary Material (Poster)
 
@@ -76,7 +76,7 @@ Generator: [`scripts/generate_spec.py`](scripts/generate_spec.py)
 
 ## What Is Missing
 
-- [ ] `demo.mp4` final render (deferred until WebUI testing is complete to avoid GPU OOM).
+- (none — all Track 2 required materials submitted)
 
 ## AI-Trace Disclosure
 

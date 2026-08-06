@@ -26,6 +26,12 @@ def code_interpreter(code: str) -> Dict[str, Any]:
 
 
 def format_code(code: str, language: str = "python") -> Dict[str, Any]:
+    """格式化代码。当前仅支持 Python（black），其他语言返回明确提示。"""
+    if language and language.lower() not in ("python", "py", ""):
+        return {
+            "success": False,
+            "error": f"暂不支持 {language} 格式化，当前仅支持 Python（black）",
+        }
     try:
         import black
         formatted_code = black.format_str(code, mode=black.Mode())

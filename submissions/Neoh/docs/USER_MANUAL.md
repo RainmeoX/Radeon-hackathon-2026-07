@@ -4,7 +4,7 @@
 > Team: **Neoh** · Track 2 — Private AI Agent Development & Local Deployment
 > Everything in this manual runs **100 % locally on an AMD Radeon GPU** (ROCm). No external API is called during inference.
 
-This manual is written for a first-time operator (including a judge) who has access to a Linux host with an AMD Radeon GPU. It covers installation, start-up, every screen of the Web UI, the CLI, all 14 agent skills, knowledge-base management, the OpenAI-compatible server, and troubleshooting.
+This manual is written for a first-time operator (including a judge) who has access to a Linux host with an AMD Radeon GPU. It covers installation, start-up, every screen of the Web UI, the CLI, all 15 agent skills, knowledge-base management, the OpenAI-compatible server, and troubleshooting.
 
 For the **evaluation walkthrough** (what to click, in what order, and what to expect) see [`EVALUATION.md`](EVALUATION.md).
 
@@ -158,10 +158,11 @@ All tools are registered in `tools/` and listed in `config.yaml → agent.tools`
 | 12 | `get_process_list` | system | no | "Show the top processes by memory" |
 | 13 | `generate_verilog` | hardware | no | "Generate a Verilog module for an I2C slave with an 8-bit register file" |
 | 14 | `generate_testbench` | hardware | no | "Write a Verilog testbench for a 4-bit ALU named alu4" |
+| 15 | `simulate_verilog` | hardware | no | "Compile and simulate generated/alu4_tb.v with iverilog/vvp" |
 
 Generated HDL is written to `./generated/`.
 
-> **Honest scope note.** `generate_verilog` / `generate_testbench` are LLM-based generation specialised by a hardware system prompt and datasheet RAG context. They are **not** connected to a simulator (iverilog / Verilator), so the produced HDL is not automatically proven correct — it is a drafting aid for an engineer, not a verified EDA flow.
+> **Scope note.** `generate_verilog` / `generate_testbench` are LLM-based generation specialised by a hardware system prompt and datasheet RAG context. The generated HDL can be verified locally via the `simulate_verilog` tool, which compiles the design with **iverilog** and runs it with **vvp**, returning compile/simulation logs and a pass/fail verdict. This closes the loop from generation to simulation, though it is still a drafting aid for an engineer rather than a full EDA flow.
 
 ---
 

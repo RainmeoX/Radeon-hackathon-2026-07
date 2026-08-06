@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 def run_streamlit(port: int = 7860):
     logger.info(f"Starting Streamlit server on port {port}")
     
-    streamlit_path = os.path.join(os.path.dirname(__file__), "ui", "web_app.py")
+    streamlit_path = os.path.join(os.path.dirname(__file__), "ui", "web_app_v2.py")
     
     if not os.path.exists(streamlit_path):
         logger.error(f"Streamlit app not found: {streamlit_path}")

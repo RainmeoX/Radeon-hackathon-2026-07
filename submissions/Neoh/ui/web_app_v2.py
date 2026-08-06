@@ -86,7 +86,85 @@ init_state()
 
 
 # ============================================================
-# Mock 后端（API 到了替换这里）
+# 真实后端接入：InferenceEngine + MemoryManager + RadeonAgent
+# ============================================================
+import tools  # noqa: F401  导入即触发所有工具注册到 registry
+from inference.engine import InferenceEngine, InferenceConfig
+from memory.manager import MemoryManager
+from agent.core import RadeonAgent
+from agent.audit import audit_logger
+from agent.prompts import get_system_prompt
+
+
+@st.cache_resource
+def runtime_state():
+    """跨 rerun 存活的运行时状态。"""
+    return {"model_loaded": False, "load_seconds": None, "model_name": None}
+
+
+@st.cache_resource
+def init_engine():
+    """加载 vLLM 推理引擎。无 GPU / 无模型时抛异常，由调用方捕获回退 mock。"""
+    import time as _time
+    with open(os.path.join(REPO_ROOT, "config.yaml"), "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    mc = config.get("model", {})
+    ic = InferenceConfig(
+        model_path=mc.get("path", "./models/Qwen2.5-14B-Instruct"),
+        n_ctx=mc.get("n_ctx", 8192),
+        temperature=mc.get("temperature", 0.3),
+        max_tokens=mc.get("max_tokens", 4096),
+        dtype=mc.get("dtype", "float16"),
+        gpu_memory_utilization=mc.get("gpu_memory_utilization", 0.90),
+        tensor_parallel_size=mc.get("tensor_parallel_size", 1),
+        pipeline_parallel_size=mc.get("pipeline_parallel_size", 1),
+    )
+    if not os.path.exists(ic.model_path):
+        raise RuntimeError(f"Model not found: {ic.model_path}")
+    t0 = _time.time()
+    engine = InferenceEngine(ic)
+    state = runtime_state()
+    state["model_loaded"] = True
+    state["load_seconds"] = round(_time.time() - t0, 1)
+    state["model_name"] = os.path.basename(ic.model_path)
+    return engine
+
+
+@st.cache_resource
+def init_memory():
+    """初始化 RAG 记忆系统（FAISS + embeddings）。"""
+    with open(os.path.join(REPO_ROOT, "config.yaml"), "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    rc = config.get("rag", {})
+    return MemoryManager(
+        vector_store_path=os.path.join(REPO_ROOT, "data", "faiss_index"),
+        embedding_model=rc.get("embedding_model", "all-MiniLM-L6-v2"),
+        chunk_size=rc.get("chunk_size", 512),
+        chunk_overlap=rc.get("chunk_overlap", 50),
+        top_k=rc.get("top_k", 5),
+    )
+
+
+def web_approval_callback(tool_name: str, arguments: dict, description: str) -> bool:
+    """Web 模式审批回调：演示场景自动放行（拦截决策仍写审计日志）。"""
+    audit_logger.log_tool_call(tool_name, arguments, approved=True, auto=True)
+    return True
+
+
+@st.cache_resource
+def init_agent():
+    """初始化 Agent（引擎 + 记忆 + 工具注册）。"""
+    engine = init_engine()
+    memory = init_memory()
+    return RadeonAgent(
+        engine, memory,
+        prompt_mode="hardware",
+        approval_callback=web_approval_callback,
+    )
+
+
+# ============================================================
+# Mock 后端（真实后端不可用时回退）
 # ============================================================
 MOCK_RESPONSES = {
     "spi": """依据 **STM32H7 系列**官方参考手册（RM0433，第 24.3.1 节），SPI 外设的最高支持时钟频率为 **108 MHz**。
@@ -220,14 +298,14 @@ def mock_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
 
 
 # ============================================================
-# 真实后端：调用本地 vLLM OpenAI 兼容 API
+# 真实后端响应：优先用 RadeonAgent（含 RAG + 工具调用），失败回退 vLLM API，再失败回退 mock
 # ============================================================
 import urllib.request
 import urllib.error
 
-# 指向本机已起的 vLLM 服务（serve.py，0.0.0.0:8000）；同一台机器用 127.0.0.1 即可
-API_BASE = "http://127.0.0.1:8000/v1"
-API_MODEL = "qwen2.5-14b"
+# vLLM OpenAI 兼容接口（serve.py 起的本地服务，作为 Agent 不可用时的降级）
+API_BASE = os.environ.get("VLLM_API_BASE", "http://127.0.0.1:8000/v1")
+API_MODEL = os.environ.get("VLLM_API_MODEL", "qwen2.5-14b")
 SYSTEM_PROMPT = (
     "你是 Radeon-Assistant（磐石），一个完全本地运行的硬件研发 AI 助手，"
     "擅长硬件电路设计、Verilog/SystemVerilog、Datasheet 分析与本地推理。"
@@ -235,17 +313,73 @@ SYSTEM_PROMPT = (
 )
 
 
-def api_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
-    """调用本地 Qwen2.5-14B（vLLM OpenAI 兼容接口），返回与 mock 相同结构。"""
+def _agent_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
+    """通过 RadeonAgent 响应：Chat 模式走 RAG 对话，Agent 模式走工具调用链。"""
+    agent = init_agent()
+    st.session_state.model_loaded = True
+
+    if mode == "Agent":
+        # Agent 模式：Planner→Executor→Reflector 工具调用
+        result = agent.run_task(user_input)
+        tools_used = []
+        for step, res in zip(result.get("steps", []), result.get("results", [])):
+            tools_used.append({
+                "name": step.get("tool") or "llm",
+                "status": "ok" if res.get("success") else "error",
+                "detail": step.get("description", ""),
+                "output": res,
+            })
+        refl = result.get("reflection", {})
+        content = refl.get("summary") or refl.get("reason") or "任务执行完成"
+        if not result.get("success"):
+            content = f"任务未完成：{refl.get('reason', '未知原因')}"
+        return {"content": content, "tools": tools_used, "sources": []}
+    else:
+        # Chat 模式：RAG 对话
+        response, sources = agent.chat(
+            user_input, use_rag=rag, return_sources=True,
+        )
+        src_list = [
+            {"name": s.get("source", f"document {i+1}"),
+             "snippet": s.get("content", "")[:300]}
+            for i, s in enumerate(sources)
+        ]
+        return {"content": response, "tools": [], "sources": src_list}
+
+
+def _vllm_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
+    """降级方案：直接调 vLLM OpenAI 兼容接口（无工具调用，RAG 手动拼接）。"""
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    for m in st.session_state.messages:
-        if m["role"] in ("user", "assistant") and m.get("content"):
-            messages.append({"role": m["role"], "content": m["content"]})
+
+    # RAG 检索（如果开启了且 memory 可用）
+    sources = []
+    if rag:
+        try:
+            mm = init_memory()
+            results = mm.search(user_input)
+            if results:
+                ctx_parts = []
+                for i, r in enumerate(results):
+                    ctx_parts.append(f"[参考文档 {i+1}]\n{r['content']}")
+                    meta = r.get("metadata", {}) or {}
+                    sources.append({
+                        "name": meta.get("source") or meta.get("file_name") or f"document {i+1}",
+                        "snippet": r["content"][:300],
+                    })
+                context = "参考文档:\n" + "\n".join(ctx_parts)
+                messages.append({"role": "user", "content": f"{context}\n\n问题:\n{user_input}"})
+            else:
+                messages.append({"role": "user", "content": user_input})
+        except Exception:
+            messages.append({"role": "user", "content": user_input})
+    else:
+        messages.append({"role": "user", "content": user_input})
+
     payload = {
         "model": API_MODEL,
         "messages": messages,
         "max_tokens": 2048,
-        "temperature": 0.7,
+        "temperature": 0.3,
         "stream": False,
     }
     req = urllib.request.Request(
@@ -257,7 +391,20 @@ def api_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
     with urllib.request.urlopen(req, timeout=180) as resp:
         data = json.loads(resp.read().decode("utf-8"))
     content = data["choices"][0]["message"]["content"]
-    return {"content": content, "tools": [], "sources": []}
+    return {"content": content, "tools": [], "sources": sources}
+
+
+def api_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
+    """真实后端响应：Agent 优先 → vLLM API 降级 → 抛异常由上层回退 mock。"""
+    # 优先尝试 Agent（完整功能：RAG + 工具调用）
+    try:
+        return _agent_respond(user_input, mode, rag)
+    except Exception as e:
+        # Agent 不可用（无 GPU / 无模型），降级到 vLLM API
+        try:
+            return _vllm_respond(user_input, mode, rag)
+        except Exception:
+            raise RuntimeError(f"Agent and vLLM API both failed: {e}")
 
 
 # ============================================================
@@ -345,11 +492,21 @@ def render_sidebar():
         st.markdown('<div class="sb-footer">', unsafe_allow_html=True)
 
         with st.expander("📚 知识库", expanded=False):
+            # 真实读取已索引 chunks 数
+            try:
+                kb_count = init_memory().get_document_count()
+                st.session_state.kb_chunks = kb_count
+            except Exception:
+                pass
             st.markdown(f"已索引 chunks: **{st.session_state.kb_chunks}**")
             if st.button("上传文档", key="sb_upload", use_container_width=True):
                 st.session_state.show_upload = not st.session_state.show_upload
                 st.rerun()
             if st.button("清空索引", key="sb_clear_kb", use_container_width=True):
+                try:
+                    init_memory().clear_long_term_memory()
+                except Exception:
+                    pass
                 st.session_state.kb_chunks = 0
                 st.session_state.processed_docs = set()
                 st.rerun()
@@ -368,11 +525,23 @@ def render_sidebar():
                 )
 
         with st.expander("🖥️ 系统", expanded=False):
-            st.markdown(f"**GPU:** {st.session_state.gpu_name}")
-            st.markdown(f"**模型:** {st.session_state.model_name}")
-            st.markdown(f"**状态:** {'🟢 已加载' if st.session_state.model_loaded else '⚪ 待加载'}")
+            try:
+                rs = runtime_state()
+                if rs.get("model_loaded"):
+                    st.markdown(f"**模型:** {rs.get('model_name') or st.session_state.model_name}")
+                    st.markdown(f"**状态:** 🟢 已加载（{rs.get('load_seconds', '?')}s）")
+                else:
+                    st.markdown(f"**模型:** {st.session_state.model_name}")
+                    st.markdown("**状态:** ⚪ 待加载（首次对话时加载）")
+            except Exception:
+                st.markdown(f"**模型:** {st.session_state.model_name}")
+                st.markdown("**状态:** ⚪ 待加载")
             if st.button("重新加载模型", key="sb_reload", use_container_width=True):
-                st.session_state.model_loaded = True
+                try:
+                    st.cache_resource.clear()
+                except Exception:
+                    pass
+                st.session_state.model_loaded = False
                 st.rerun()
 
         with st.expander("📋 审计日志", expanded=False):
@@ -698,11 +867,32 @@ def render_upload_panel():
         label_visibility="collapsed",
     )
     if uploaded:
-        for f in uploaded:
-            if f.name not in st.session_state.processed_docs:
-                st.session_state.processed_docs.add(f.name)
-                st.session_state.kb_chunks += 12  # mock
-                st.success(f"已索引 {f.name}：12 chunks")
+        new_files = [f for f in uploaded if f.name not in st.session_state.processed_docs]
+        if new_files:
+            try:
+                mm = init_memory()
+                save_dir = os.path.join(REPO_ROOT, "data", "documents")
+                os.makedirs(save_dir, exist_ok=True)
+                for f in new_files:
+                    safe_name = os.path.basename(f.name)
+                    file_path = os.path.join(save_dir, safe_name)
+                    with open(file_path, "wb") as fp:
+                        fp.write(f.getbuffer())
+                    added = mm.add_document(file_path)
+                    if added > 0:
+                        st.session_state.processed_docs.add(f.name)
+                        st.session_state.kb_chunks = mm.get_document_count()
+                        st.success(f"已索引 {f.name}：{added} chunks")
+                    else:
+                        st.warning(f"无法从 {f.name} 提取文本（可能是扫描版 PDF）")
+                st.rerun()
+            except Exception as e:
+                st.error(f"文档索引失败（RAG 未初始化）：{e}")
+                # mock 回退
+                for f in new_files:
+                    st.session_state.processed_docs.add(f.name)
+                    st.session_state.kb_chunks += 12
+                    st.success(f"已索引 {f.name}：12 chunks（mock）")
                 st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 

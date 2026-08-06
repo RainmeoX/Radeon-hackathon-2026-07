@@ -217,8 +217,9 @@ def simulate_verilog(testbench_path: str, dut_path: Optional[str] = None,
                 if af not in sources:
                     sources.append(af)
 
-    out_file = os.path.join(tempfile.gettempdir(),
-                            f"sim_{os.getpid()}_{abs(hash(''.join(sources)))}.out")
+    # 用 mkstemp 生成唯一临时文件，避免并发调用路径冲突
+    fd, out_file = tempfile.mkstemp(prefix="sim_", suffix=".out")
+    os.close(fd)  # 只需路径，关闭文件描述符
     cmd_compile = ["iverilog", "-g2012", "-o", out_file] + sources
     try:
         comp = subprocess.run(cmd_compile, capture_output=True, text=True, timeout=timeout)
@@ -241,10 +242,11 @@ def simulate_verilog(testbench_path: str, dut_path: Optional[str] = None,
     # 编译通过 -> 运行 vvp
     try:
         run = subprocess.run(["vvp", out_file], capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return {"success": True, "passed": False,
+    except subprocess.TimeoutExpired as e:
+        # 仿真超时视为执行失败（与编译超时一致），保留部分输出便于调试
+        return {"success": False, "passed": False,
                 "error": f"仿真超时（>{timeout}s，可能缺 $finish）",
-                "stdout": "", "stderr": ""}
+                "stdout": e.stdout or "", "stderr": e.stderr or ""}
     finally:
         try:
             os.remove(out_file)

@@ -1,4 +1,5 @@
 import logging
+import subprocess
 import psutil
 from typing import Dict, Any
 from .registry import ToolDefinition, registry
@@ -54,6 +55,8 @@ def get_gpu_info() -> Dict[str, Any]:
             return {"success": False, "error": "ROCm GPU 信息获取失败", "stderr": result.stderr}
     except FileNotFoundError:
         return {"success": False, "error": "rocm-smi 命令未找到，可能未安装 ROCm"}
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "rocm-smi 命令超时（>10s），GPU 驱动可能异常"}
     except Exception as e:
         return {"success": False, "error": str(e)}
 

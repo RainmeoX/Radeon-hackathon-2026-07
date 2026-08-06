@@ -8,6 +8,12 @@ logger = logging.getLogger(__name__)
 
 
 def execute_command(command: str, timeout: int = 60) -> Dict[str, Any]:
+    """执行系统命令。
+
+    安全说明：本工具 requires_approval=True（高危，需用户审批）。
+    shell=True 是有意保留——Agent 任务需要管道、重定向、环境变量展开等 shell 特性。
+    审批门控是主要防线；如需更严格隔离，可在审批回调里做命令白名单校验。
+    """
     try:
         result = subprocess.run(
             command,
@@ -16,7 +22,7 @@ def execute_command(command: str, timeout: int = 60) -> Dict[str, Any]:
             text=True,
             timeout=timeout,
         )
-        
+
         return {
             "success": result.returncode == 0,
             "stdout": result.stdout,
