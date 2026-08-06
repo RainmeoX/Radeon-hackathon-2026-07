@@ -81,6 +81,7 @@ def init_state():
     ss.setdefault("model_loaded", False)
     ss.setdefault("model_name", "Qwen2.5-14B-Instruct")
     ss.setdefault("gpu_name", "AMD Radeon Pro W7900")
+    ss.setdefault("kb_documents", [])  # lightweight RAG fallback: [{name, content, chunks}]
 
 init_state()
 
@@ -338,9 +339,10 @@ import urllib.error
 API_BASE = os.environ.get("VLLM_API_BASE", "http://127.0.0.1:8000/v1")
 API_MODEL = os.environ.get("VLLM_API_MODEL", "qwen2.5-14b")
 SYSTEM_PROMPT = (
-    "你是 Radeon-Assistant（磐石），一个完全本地运行的硬件研发 AI 助手，"
-    "擅长硬件电路设计、Verilog/SystemVerilog、Datasheet 分析与本地推理。"
-    "回答应专业、严谨，必要时给出公式、代码片段与数据来源。用中文回答。"
+    "You are Radeon-Assistant (Bedrock), a fully locally-deployed hardware R&D AI assistant. "
+    "You specialize in hardware circuit design, Verilog/SystemVerilog, datasheet analysis, and local inference. "
+    "Your answers should be professional and rigorous, providing formulas, code snippets, and data sources when appropriate. "
+    "Always respond in English. When answering questions about uploaded documents, cite the document name and specific sections."
 )
 
 
@@ -379,31 +381,71 @@ def _agent_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
         return {"content": response, "tools": [], "sources": src_list}
 
 
+def _simple_rag_search(query: str, top_k: int = 3) -> list:
+    """Lightweight RAG fallback: keyword-based search over documents stored in session_state.
+    Used when FAISS/sentence_transformers are unavailable (no GPU / no heavy deps).
+    Returns list of {content, metadata: {source}}."""
+    docs = st.session_state.get("kb_documents", [])
+    if not docs:
+        return []
+    # Simple keyword overlap scoring
+    query_lower = query.lower()
+    query_words = set(w for w in query_lower.split() if len(w) > 2)
+    scored = []
+    for doc in docs:
+        for chunk in doc.get("chunks", []):
+            chunk_lower = chunk.lower()
+            overlap = sum(1 for w in query_words if w in chunk_lower)
+            if overlap > 0:
+                scored.append((overlap, chunk, doc["name"]))
+    scored.sort(key=lambda x: -x[0])
+    return [
+        {"content": s[1], "metadata": {"source": s[2]}}
+        for s in scored[:top_k]
+    ]
+
+
 def _vllm_respond(user_input: str, mode: str, rag: bool) -> Dict[str, Any]:
     """降级方案：直接调 vLLM OpenAI 兼容接口（无工具调用，RAG 手动拼接）。"""
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    # RAG 检索（如果开启了且 memory 可用）
+    # RAG 检索（如果开启了）
     sources = []
     if rag:
+        rag_done = False
+        # 优先用 FAISS memory（完整 RAG）
         try:
             mm = init_memory()
             results = mm.search(user_input)
             if results:
                 ctx_parts = []
                 for i, r in enumerate(results):
-                    ctx_parts.append(f"[参考文档 {i+1}]\n{r['content']}")
+                    ctx_parts.append(f"[Reference Doc {i+1}]\n{r['content']}")
                     meta = r.get("metadata", {}) or {}
                     sources.append({
                         "name": meta.get("source") or meta.get("file_name") or f"document {i+1}",
                         "snippet": r["content"][:300],
                     })
-                context = "参考文档:\n" + "\n".join(ctx_parts)
-                messages.append({"role": "user", "content": f"{context}\n\n问题:\n{user_input}"})
+                context = "Reference documents:\n" + "\n".join(ctx_parts)
+                messages.append({"role": "user", "content": f"{context}\n\nQuestion:\n{user_input}"})
+                rag_done = True
+        except Exception:
+            pass
+        # 回退：轻量关键词 RAG
+        if not rag_done:
+            results = _simple_rag_search(user_input)
+            if results:
+                ctx_parts = []
+                for i, r in enumerate(results):
+                    ctx_parts.append(f"[Reference Doc {i+1}] ({r['metadata']['source']})\n{r['content']}")
+                    sources.append({
+                        "name": r["metadata"]["source"],
+                        "snippet": r["content"][:300],
+                    })
+                context = "Reference documents (from uploaded knowledge base):\n" + "\n".join(ctx_parts)
+                messages.append({"role": "user", "content": f"{context}\n\nQuestion:\n{user_input}"})
             else:
                 messages.append({"role": "user", "content": user_input})
-        except Exception:
-            messages.append({"role": "user", "content": user_input})
     else:
         messages.append({"role": "user", "content": user_input})
 
@@ -876,8 +918,8 @@ def render_input_bar():
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown(
         f'<div class="input-hint">⚡ {st.session_state.mode} · '
-        f'{"RAG 检索" if st.session_state.rag_enabled else "纯对话"} · '
-        f'本地推理 · 数据不上传</div>',
+        f'{"RAG Search" if st.session_state.rag_enabled else "Plain Chat"} · '
+        f'Local Inference · Data Never Leaves Your Machine</div>',
         unsafe_allow_html=True,
     )
     st.markdown('</div>', unsafe_allow_html=True)
@@ -898,7 +940,7 @@ def render_upload_panel():
                 border-radius:var(--r-md)">
     """, unsafe_allow_html=True)
     uploaded = st.file_uploader(
-        "上传硬件手册 / Datasheet（PDF / DOCX / MD / TXT）",
+        "Upload Hardware Manual / Datasheet (PDF / DOCX / MD / TXT)",
         type=["pdf", "docx", "md", "txt"],
         accept_multiple_files=True,
         label_visibility="collapsed",
@@ -924,12 +966,30 @@ def render_upload_panel():
                         st.warning(f"无法从 {f.name} 提取文本（可能是扫描版 PDF）")
                 st.rerun()
             except Exception as e:
-                st.error(f"文档索引失败（RAG 未初始化）：{e}")
-                # mock 回退
+                # 轻量 RAG 回退：init_memory 不可用时，直接读文本存 session_state
                 for f in new_files:
-                    st.session_state.processed_docs.add(f.name)
-                    st.session_state.kb_chunks += 12
-                    st.success(f"已索引 {f.name}：12 chunks（mock）")
+                    try:
+                        raw = f.getbuffer().tobytes()
+                        text = raw.decode("utf-8", errors="ignore")
+                        # 分块（每 500 字符，重叠 50）
+                        chunk_size = 500
+                        overlap = 50
+                        chunks = []
+                        i = 0
+                        while i < len(text):
+                            chunks.append(text[i:i+chunk_size].strip())
+                            i += chunk_size - overlap
+                        chunks = [c for c in chunks if len(c) > 20]
+                        st.session_state.kb_documents.append({
+                            "name": f.name,
+                            "content": text[:5000],  # 保留完整内容前 5KB
+                            "chunks": chunks,
+                        })
+                        st.session_state.processed_docs.add(f.name)
+                        st.session_state.kb_chunks += len(chunks)
+                        st.success(f"Indexed {f.name}: {len(chunks)} chunks (lightweight RAG)")
+                    except Exception as e2:
+                        st.error(f"Failed to process {f.name}: {e2}")
                 st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
