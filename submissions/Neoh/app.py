@@ -11,11 +11,20 @@ os.environ.setdefault("RCCL_NCCL_NCHANNELS", "4")
 os.environ.setdefault("RCCL_NCCL_NSOCKETS_PERCHANNEL", "8")
 os.environ.setdefault("NCCL_SOCKET_IFNAME", "lo")
 os.environ.setdefault("HSA_ENABLE_INTERRUPTIBLE", "0")
+# glibc 2.35 (Ubuntu 22.04) 兼容 + flash-attn ROCm 启用（与 install_rocm.sh / scripts/serve.py 一致）
+os.environ.setdefault("FLASH_ATTENTION_TRITON_AMD_ENABLE", "TRUE")
 
 import logging
 import sys
 import subprocess
 import argparse
+
+# AMD ROCm SDK 路径（amd_smi 等需要），glibc 2.35 环境下 vLLM/torch 运行时依赖
+os.environ.setdefault(
+    "PYTHONPATH",
+    os.path.join(sys.prefix, "lib", "python3.14", "site-packages",
+                 "_rocm_sdk_core", "share", "amd_smi"),
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -106,7 +115,7 @@ def run_cli():
         )
         
         logger.info("Agent initialized successfully")
-        print("\n🤖 Radeon-Assistant CLI")
+        print("\n Radeon-Assistant CLI")
         print("输入 'quit' 或 'exit' 退出")
         print("输入 'task <任务>' 执行多步骤任务")
         print("-" * 50)
@@ -131,7 +140,7 @@ def run_cli():
                 print("正在执行任务...")
                 result = agent.run_task(task)
                 print(f"\n{'='*50}")
-                print(f"任务结果: {'✅ 完成' if result['success'] else '❌ 未完成'}")
+                print(f"任务结果: {' 完成' if result['success'] else ' 未完成'}")
                 reflection = result.get('reflection', {})
                 reason = str(reflection.get('reason', ''))[:200]
                 print(f"评估: {reason}")
@@ -142,8 +151,8 @@ def run_cli():
                     print(f"\n执行步骤数: {len(steps)}")
                     for i, (s, r) in enumerate(zip(steps, results)):
                         tool = s.get('tool') or '无'
-                        success = '✅' if r.get('success') else '❌'
-                        print(f"  步骤{i+1}: {s.get('description','')[:40]} | 工具: {tool} {success}")
+                        success = '' if r.get('success') else ''
+                        print(f" 步骤{i+1}: {s.get('description','')[:40]} | 工具: {tool} {success}")
                 print(f"{'='*50}")
             else:
                 response = agent.chat(clean)

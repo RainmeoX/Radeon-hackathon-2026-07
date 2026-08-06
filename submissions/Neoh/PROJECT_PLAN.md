@@ -8,18 +8,18 @@
 
 本项目是一个**完全本地化部署**的 AI Agent 系统，基于 **AMD Radeon GPU** 与 **ROCm** 软件栈构建。所有推理计算均在本地 GPU 上完成，确保数据隐私与低延迟响应。
 
-**项目名称**：Radeon-Assistant  
-**团队名称**：Neoh  
+**项目名称**：Radeon-Assistant 
+**团队名称**：Neoh 
 **赛道**：Track 2 - 私有 AI Agent 开发与本地部署
 
 ### 1.2 核心价值
 
 | 维度 | 说明 |
 |------|------|
-| 🎯 隐私保护 | 100% 数据本地处理，零外部 API 调用 |
-| ⚡ 高性能 | 基于 ROCm + vLLM 的 GPU 加速推理 |
-| 🔧 可扩展 | 模块化架构，支持工具扩展和模型切换 |
-| 📚 知识驱动 | 内置 RAG 系统，支持私有文档问答 |
+| 隐私保护 | 100% 数据本地处理，零外部 API 调用 |
+| 高性能 | 基于 ROCm + vLLM 的 GPU 加速推理 |
+| 可扩展 | 模块化架构，支持工具扩展和模型切换 |
+| 知识驱动 | 内置 RAG 系统，支持私有文档问答 |
 
 ---
 
@@ -37,23 +37,23 @@
 
 | 功能 | 实现方式 | GPU加速 | 说明 |
 |------|---------|---------|------|
-| 自然语言理解 | Qwen2.5-14B | ✅ | 理解用户意图和上下文 |
-| 多步骤任务规划 | LLM 链式推理 | ✅ | 将复杂任务分解为可执行步骤 |
-| 工具调用决策 | ReAct 模式 | ✅ | 判断何时调用工具及调用哪个 |
-| 文档向量化 | all-MiniLM-L6-v2 | ✅ | 将文本转为向量表示 |
-| 相似度检索 | FAISS | ✅ | Top-K 最相似文档检索 |
-| 结果反思与修正 | LLM 自我评估 | ✅ | 检查执行结果并优化 |
+| 自然语言理解 | Qwen2.5-14B | | 理解用户意图和上下文 |
+| 多步骤任务规划 | LLM 链式推理 | | 将复杂任务分解为可执行步骤 |
+| 工具调用决策 | ReAct 模式 | | 判断何时调用工具及调用哪个 |
+| 文档向量化 | all-MiniLM-L6-v2 | | 将文本转为向量表示 |
+| 相似度检索 | FAISS | | Top-K 最相似文档检索 |
+| 结果反思与修正 | LLM 自我评估 | | 检查执行结果并优化 |
 
 ### 2.3 模型配置参数
 
 ```yaml
 model:
-  path: "./models/Qwen2.5-14B-Instruct"  # vLLM 加载 safetensors 目录（7B 轻量备选：Qwen2.5-7B-Instruct）
-  engine: vllm            # vLLM 推理引擎
-  n_ctx: 8192             # 上下文窗口大小
-  gpu_memory_utilization: 0.90  # GPU 显存占用比例
-  temperature: 0.7        # 创造性控制
-  max_tokens: 4096        # 最大生成长度
+  path: "./models/Qwen2.5-14B-Instruct" # vLLM 加载 safetensors 目录（7B 轻量备选：Qwen2.5-7B-Instruct）
+  engine: vllm # vLLM 推理引擎
+  n_ctx: 8192 # 上下文窗口大小
+  gpu_memory_utilization: 0.90 # GPU 显存占用比例
+  temperature: 0.7 # 创造性控制
+  max_tokens: 4096 # 最大生成长度
 ```
 
 ---
@@ -64,32 +64,32 @@ model:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      系统启动流程                                 │
+│ 系统启动流程 │
 ├─────────────────────────────────────────────────────────────────┤
-│  Step 1: 环境检查                                                │
-│  ├─ rocm-smi --showproductname → 验证 GPU                        │
-│  ├─ 检查 ROCm 版本 ≥ 7.0                                        │
-│  └─ 验证 CUDA_VISIBLE_DEVICES / HIP_VISIBLE_DEVICES             │
-│                                                                 │
-│  Step 2: 配置加载                                                │
-│  ├─ 读取 config.yaml                                            │
-│  ├─ 解析模型路径和参数                                           │
-│  └─ 加载工具列表                                                 │
-│                                                                 │
-│  Step 3: 模型初始化                                              │
-│  ├─ 加载 safetensors 模型到 GPU                                 │
-│  ├─ vLLM 自动全量 offload + PagedAttention                      │
-│  └─ 初始化 KV 缓存                                               │
-│                                                                 │
-│  Step 4: 组件初始化                                              │
-│  ├─ 初始化 FAISS 向量数据库                                     │
-│  ├─ 加载 Embedding 模型 (GPU 加速)                              │
-│  ├─ 注册工具到工具中心                                           │
-│  └─ 初始化记忆管理器                                             │
-│                                                                 │
-│  Step 5: 服务启动                                                │
-│  ├─ 启动 Streamlit Web 服务                                     │
-│  └─ 监听端口 7860                                                │
+│ Step 1: 环境检查 │
+│ ├─ rocm-smi --showproductname → 验证 GPU │
+│ ├─ 检查 ROCm 版本 ≥ 7.0 │
+│ └─ 验证 CUDA_VISIBLE_DEVICES / HIP_VISIBLE_DEVICES │
+│ │
+│ Step 2: 配置加载 │
+│ ├─ 读取 config.yaml │
+│ ├─ 解析模型路径和参数 │
+│ └─ 加载工具列表 │
+│ │
+│ Step 3: 模型初始化 │
+│ ├─ 加载 safetensors 模型到 GPU │
+│ ├─ vLLM 自动全量 offload + PagedAttention │
+│ └─ 初始化 KV 缓存 │
+│ │
+│ Step 4: 组件初始化 │
+│ ├─ 初始化 FAISS 向量数据库 │
+│ ├─ 加载 Embedding 模型 (GPU 加速) │
+│ ├─ 注册工具到工具中心 │
+│ └─ 初始化记忆管理器 │
+│ │
+│ Step 5: 服务启动 │
+│ ├─ 启动 Streamlit Web 服务 │
+│ └─ 监听端口 7860 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -97,9 +97,9 @@ model:
 
 ```
 用户上传文档 → 文档解析 → 文本分块 → 向量化 → 存入 FAISS → 持久化
-     │              │           │          │             │
-     │         PDF/DOCX/MD    chunk_size  GPU 加速     本地磁盘
-     │         提取纯文本      = 512      384维向量    index.faiss
+     │ │ │ │ │
+     │ PDF/DOCX/MD chunk_size GPU 加速 本地磁盘
+     │ 提取纯文本 = 512 384维向量 index.faiss
      └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -107,8 +107,8 @@ model:
 
 ```
 用户提问 → 问题向量化 → FAISS 检索 → 构建上下文 → LLM 生成 → 返回答案
-     │              │            │            │           │          │
-     │           GPU 加速     Top-K=5      拼接参考    GPU 推理   带引用来源
+     │ │ │ │ │ │
+     │ GPU 加速 Top-K=5 拼接参考 GPU 推理 带引用来源
      └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -116,19 +116,19 @@ model:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                   Plan-and-Execute 循环                          │
+│ Plan-and-Execute 循环 │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  用户输入 → [Planner] → 任务分解 → [Executor] → 工具调用        │
-│                                     ↓                           │
-│                              [Reflector] → 结果评估             │
-│                                     ↓                           │
-│                              成功？→ 是 → 返回最终结果           │
-│                              ↓ 否                               │
-│                         [Reviser] → 修正计划 → 回到 Executor     │
-│                                                                 │
-│  最大迭代次数: max_iterations = 10                              │
-│                                                                 │
+│ │
+│ 用户输入 → [Planner] → 任务分解 → [Executor] → 工具调用 │
+│ ↓ │
+│ [Reflector] → 结果评估 │
+│ ↓ │
+│ 成功？→ 是 → 返回最终结果 │
+│ ↓ 否 │
+│ 回到 Planner 重新规划（最多 max_iterations 次）│
+│ │
+│ 最大迭代次数: max_iterations = 10 │
+│ │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -156,38 +156,45 @@ Action (行动): code_interpreter("统计代码...")
 
 ```
 submissions/Neoh/
-├── app.py                 # 应用入口
-├── config.yaml            # 全局配置
-├── requirements.txt       # 依赖列表
-├── agent/                 # Agent 核心编排层
-│   ├── core.py            # Agent 主循环
-│   ├── planner.py         # 任务规划器
-│   ├── executor.py        # 任务执行器
-│   ├── reflector.py       # 结果反思器
-│   └── reviser.py         # 计划修正器
-├── inference/             # 推理引擎层
-│   ├── engine.py          # vLLM 封装
-│   └── model_loader.py    # 模型加载管理
-├── tools/                 # 工具层
-│   ├── registry.py        # 工具注册中心
-│   ├── file_tools.py      # 文件操作工具
-│   ├── shell_tools.py     # 命令行执行工具
-│   ├── code_tools.py      # 代码解释器
-│   └── system_tools.py    # 系统信息工具
-├── memory/                # 记忆层
-│   ├── manager.py         # 记忆管理器
-│   ├── short_term.py      # 短期对话记忆
-│   └── long_term.py       # 长期向量记忆
-├── ui/                    # 前端界面
-│   └── web_app.py         # Streamlit Web 界面
-├── scripts/               # 辅助脚本
-│   ├── download_model.py  # 模型下载脚本
-│   └── init_rag.py        # RAG 初始化脚本
-├── models/                # 模型文件目录
-└── data/                  # 数据存储目录
-    ├── faiss_index/       # FAISS 向量索引
-    └── documents/         # 上传的文档
+├── app.py # 应用入口 (web / cli)
+├── config.yaml # 全局配置
+├── requirements.txt # 依赖列表 (CPU 侧; DL 栈见 install_rocm.sh)
+├── install_rocm.sh # AMD ROCm 7.14 安装脚本
+├── agent/ # Agent 核心编排层（手写 Planner→Executor→Reflector）
+│ ├── core.py # Agent 主循环
+│ ├── planner.py # 任务规划器
+│ ├── executor.py # 任务执行器（含 HITL 审批）
+│ ├── reflector.py # 结果反思器
+│ ├── audit.py # 审计日志（JSON-Lines）
+│ └── prompts.py # 系统提示词（generic / hardware）
+├── inference/ # 推理引擎层
+│ ├── engine.py # vLLM 封装
+│ └── model_loader.py # 模型加载管理（多源下载）
+├── tools/ # 工具层
+│ ├── registry.py # 工具注册中心
+│ ├── file_tools.py # 文件操作工具
+│ ├── shell_tools.py # 命令行执行工具
+│ ├── code_tools.py # 代码解释器
+│ ├── system_tools.py # 系统信息工具
+│ └── hardware_tools.py # 硬件研发工具（Verilog / testbench 生成）
+├── memory/ # 记忆层
+│ ├── manager.py # 记忆管理器（短期缓冲 + 向量检索）
+│ ├── vector_store.py # FAISS 向量存储（IndexFlatL2）
+│ └── document_parser.py # 文档解析（PDF/DOCX/MD/TXT，PDF 提取表格）
+├── ui/ # 前端界面
+│ └── web_app.py # Streamlit Web 界面
+├── scripts/ # 辅助脚本
+│ ├── download_model.py # 模型下载脚本
+│ ├── init_rag.py # 通用 RAG 初始化脚本
+│ └── init_hardware_rag.py # 硬件知识库初始化脚本
+├── models/ # 模型文件目录
+└── data/ # 数据存储目录
+    ├── faiss_index/ # FAISS 向量索引
+    ├── documents/ # 上传的文档
+    └── hardware_documents/ # 硬件 datasheet / 参考手册
 ```
+
+> **无外部 Agent 框架**：本项目不依赖 LangChain 等框架，Planner→Executor→Reflector 为手写循环（见 `agent/core.py`）。记忆层由 `MemoryManager` 直接封装 FAISS + 短期消息缓冲，不依赖独立的 `short_term`/`long_term` 模块。
 
 ### 4.2 模块职责详解
 
@@ -195,22 +202,25 @@ submissions/Neoh/
 |------|------|------|------|
 | **agent** | core.py | Agent 主循环，协调各组件 | inference |
 | | planner.py | 将用户任务分解为步骤列表 | inference |
-| | executor.py | 执行单个步骤，调用工具 | tools, inference |
+| | executor.py | 执行单个步骤，调用工具（含 HITL 审批） | tools, inference |
 | | reflector.py | 评估执行结果，判断是否完成 | inference |
-| | reviser.py | 根据评估结果修正计划 | inference |
-| **inference** | engine.py | vLLM 推理引擎封装 | vllm |
+| | audit.py | 审计日志（JSON-Lines） | - |
+| | prompts.py | 系统提示词模板（generic / hardware） | - |
+| **inference** | engine.py | vLLM 推理引擎封装 | vllm (ROCm) |
 | | model_loader.py | 模型加载和配置管理 | engine.py |
 | **tools** | registry.py | 工具注册和发现机制 | - |
 | | file_tools.py | 文件读写、目录管理 | - |
 | | shell_tools.py | 安全沙箱内执行命令 | psutil |
 | | code_tools.py | Python 代码解释执行 | - |
 | | system_tools.py | 系统状态查询 | psutil |
-| **memory** | manager.py | 统一记忆管理接口 | short_term, long_term |
-| | short_term.py | 会话内上下文保持 | langchain |
-| | long_term.py | 跨会话向量记忆 | FAISS |
+| | hardware_tools.py | Verilog / testbench 生成 | inference |
+| **memory** | manager.py | 统一记忆管理（短期缓冲 + 向量检索） | vector_store |
+| | vector_store.py | FAISS 向量存储（IndexFlatL2） | - |
+| | document_parser.py | PDF/DOCX/MD/TXT 解析（PDF 提取表格） | pdfplumber |
 | **ui** | web_app.py | Streamlit 前端界面 | streamlit |
 | **scripts** | download_model.py | 模型下载脚本 | - |
-| | init_rag.py | RAG 数据初始化 | memory |
+| | init_rag.py | 通用 RAG 数据初始化 | memory |
+| | init_hardware_rag.py | 硬件知识库初始化 | memory |
 
 ---
 
@@ -241,10 +251,10 @@ submissions/Neoh/
 
 ```
 预训练模型 (Qwen2.5-14B) + RAG (私有文档) → 领域专家 Agent
-     │                    │
-     │              用户上传文档
-     │              (PDF/Word/MD/TXT)
-     │                    │
+     │ │
+     │ 用户上传文档
+     │ (PDF/Word/MD/TXT)
+     │ │
      └────────────────────┘
               GPU 向量化 + FAISS 存储
 ```
@@ -257,19 +267,19 @@ submissions/Neoh/
 
 | 功能模块 | 功能点 | 是否使用外部 API | 使用的服务 | 隐私合规性 | 说明 |
 |----------|--------|------------------|-----------|-----------|------|
-| **核心推理** | LLM 对话生成 | ❌ | vLLM (本地) | ✅ 完全合规 | 所有推理在本地 GPU 执行 |
-| | 任务规划 | ❌ | vLLM (本地) | ✅ 完全合规 | 同上 |
-| | 工具调用决策 | ❌ | vLLM (本地) | ✅ 完全合规 | 同上 |
-| **RAG 系统** | 文档向量化 | ❌ | sentence-transformers (本地) | ✅ 完全合规 | 使用 all-MiniLM-L6-v2 |
-| | 相似度检索 | ❌ | FAISS (本地) | ✅ 完全合规 | 向量数据库本地运行 |
-| **文件操作** | 读写文件 | ❌ | Python 标准库 | ✅ 完全合规 | 本地文件系统操作 |
-| | 目录管理 | ❌ | Python 标准库 | ✅ 完全合规 | 同上 |
-| **命令执行** | Shell 命令 | ❌ | subprocess (本地) | ✅ 完全合规 | 安全沙箱内执行 |
-| **代码解释** | Python 执行 | ❌ | exec/eval (本地) | ✅ 完全合规 | 受限环境执行 |
-| **系统信息** | CPU/GPU/内存 | ❌ | psutil/rocm-smi | ✅ 完全合规 | 本地系统调用 |
-| **日历管理** | 日程查询 | ❌ | 不支持 | ✅ 完全合规 | 未实现 |
-| | 日程创建 | ❌ | 不支持 | ✅ 完全合规 | 未实现 |
-| **Web 搜索** | 网络搜索 | ❌ | 不支持 | ✅ 完全合规 | 离线优先设计 |
+| **核心推理** | LLM 对话生成 | | vLLM (本地) | 完全合规 | 所有推理在本地 GPU 执行 |
+| | 任务规划 | | vLLM (本地) | 完全合规 | 同上 |
+| | 工具调用决策 | | vLLM (本地) | 完全合规 | 同上 |
+| **RAG 系统** | 文档向量化 | | sentence-transformers (本地) | 完全合规 | 使用 all-MiniLM-L6-v2 |
+| | 相似度检索 | | FAISS (本地) | 完全合规 | 向量数据库本地运行 |
+| **文件操作** | 读写文件 | | Python 标准库 | 完全合规 | 本地文件系统操作 |
+| | 目录管理 | | Python 标准库 | 完全合规 | 同上 |
+| **命令执行** | Shell 命令 | | subprocess (本地) | 完全合规 | 安全沙箱内执行 |
+| **代码解释** | Python 执行 | | exec/eval (本地) | 完全合规 | 受限环境执行 |
+| **系统信息** | CPU/GPU/内存 | | psutil/rocm-smi | 完全合规 | 本地系统调用 |
+| **日历管理** | 日程查询 | | 不支持 | 完全合规 | 未实现 |
+| | 日程创建 | | 不支持 | 完全合规 | 未实现 |
+| **Web 搜索** | 网络搜索 | | 不支持 | 完全合规 | 离线优先设计 |
 
 ### 6.2 隐私保护设计原则
 
@@ -348,9 +358,9 @@ Phase 6: 文档与提交
 
 | 优先级 | 标记 | 说明 |
 |--------|------|------|
-| 🔴 高 | 必须完成，阻塞后续工作 | 推理引擎、Agent 核心、RAG |
-| 🟡 中 | 重要功能，提升体验 | 前端界面、审计日志、审批机制 |
-| 🟢 低 | 可选优化，锦上添花 | 性能调优、额外工具 |
+| 高 | 必须完成，阻塞后续工作 | 推理引擎、Agent 核心、RAG |
+| 中 | 重要功能，提升体验 | 前端界面、审计日志、审批机制 |
+| 低 | 可选优化，锦上添花 | 性能调优、额外工具 |
 
 ---
 
@@ -360,7 +370,7 @@ Phase 6: 文档与提交
 
 | 风险 | 概率 | 影响 | 应对策略 |
 |------|------|------|---------|
-| ROCm 环境配置复杂 | 高 | 高 | 提供 Docker 一键部署方案 |
+| ROCm 环境配置复杂 | 高 | 高 | 提供 install_rocm.sh 一键安装脚本（AMD ROCm 7.14 源 + glibc shim） |
 | vLLM ROCm 兼容问题 | 中 | 高 | 使用官方 ROCm 预编译 wheel |
 | 模型下载缓慢 | 中 | 中 | 提供模型镜像下载链接 |
 | GPU 显存不足 | 低 | 高 | 降低 gpu_memory_utilization，或换用更小模型 |
@@ -418,6 +428,6 @@ Track 2, Neoh, Radeon-Assistant
 
 ---
 
-**文档版本**：v1.0  
-**创建日期**：2026-07-18  
+**文档版本**：v1.0 
+**创建日期**：2026-07-18 
 **团队**：Neoh

@@ -1,186 +1,143 @@
-"""vLLM 推理引擎封装。
+"""vLLM 推理引擎封装（ROCm / AMD Radeon）。
 
-使用 vLLM 在 AMD Radeon GPU (ROCm) 上运行 Qwen2.5-14B-Instruct（7B 轻量备选）。
-vLLM 提供 PagedAttention + 连续批处理。
+在 AMD Radeon GPU 上以 vLLM 运行 Qwen2.5（14B/7B/32B）。ROCm 环境变量
+（HSA_OVERRIDE_GFX_VERSION 等）由 app.py / scripts/serve.py / ui/web_app.py
+在导入本模块之前设置，本模块不再设置，避免与入口逻辑耦合。
 
-API 与原 llama_cpp 版本保持兼容：
-- generate(prompt, **kwargs) -> str
-- chat_completion(messages, **kwargs) -> str
-- get_model_info() -> dict
-- unload()
+API：
+- generate(prompt, **kwargs) -> str         原始文本补全
+- chat(messages, **kwargs) -> str           将 messages 拼成 "role: content\\n" 文本后补全
+- chat_completion(messages, **kwargs) -> str  chat 的向后兼容别名
+- get_model_info() -> dict / unload()       状态查询与卸载
 """
 
 import logging
 import os
-
-# ---- ROCm 环境变量（必须在 import torch/vllm 之前设置）----
-# W7900 / RX 7900 系列是 gfx1100 架构，vLLM 官方 wheel 默认为
-# 数据中心卡（MI200/MI300）编译，需要 override 才能识别消费级/专业卡。
-os.environ.setdefault("HSA_OVERRIDE_GFX_VERSION", "11.0.0")
-os.environ.setdefault("PYTORCH_ROCM_ARCH", "gfx1100")
-os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")  # 默认用第一张 GPU
-os.environ.setdefault("HSA_ENABLE_SDMA", "0")
-
-# ---- 多卡 TP 必需的环境变量 ----
-# vLLM 用 multiprocessing 启动 worker，必须用 spawn 模式才能继承环境变量
-os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
-# RCCL（ROCm 的 NCCL）多卡通信优化
-os.environ.setdefault("RCCL_NCCL_NCHANNELS", "4")
-os.environ.setdefault("RCCL_NCCL_NSOCKETS_PERCHANNEL", "8")
-os.environ.setdefault("NCCL_SOCKET_IFNAME", "lo")
-# 避免 ROCm 在多 GPU 环境下的锁冲突
-os.environ.setdefault("HSA_ENABLE_INTERRUPTIBLE", "0")
-
 from typing import Optional, List, Dict, Any
+
+from vllm import LLM, SamplingParams
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 
 class InferenceConfig(BaseModel):
+    # 调用方统一使用 model_path 字段名（config.yaml 的 model.path 经此传入）
     model_path: str = Field(..., description="模型目录路径（safetensors 格式）")
-    n_gpu_layers: int = Field(-1, description="兼容字段，vLLM 自动全量 offload")
     n_ctx: int = Field(8192, description="上下文窗口大小（max_model_len）")
-    n_batch: int = Field(512, description="兼容字段，vLLM 自动管理批处理")
-    temperature: float = Field(0.7, description="温度参数")
-    max_tokens: int = Field(4096, description="最大生成 token 数")
-    chat_format: str = Field("qwen2", description="对话格式（vLLM 自动从 tokenizer 读取）")
-    # vLLM 专用参数
-    gpu_memory_utilization: float = Field(0.90, description="GPU 显存占用比例")
     dtype: str = Field("float16", description="模型精度：float16/bfloat16/auto")
-    trust_remote_code: bool = Field(True, description="是否信任远程代码")
-    # 多卡并行参数
-    tensor_parallel_size: int = Field(1, description="张量并行 GPU 数（ROCm 7.2.1 仅 1/8 稳定）")
+    gpu_memory_utilization: float = Field(0.9, description="GPU 显存利用率")
+    tensor_parallel_size: int = Field(1, description="张量并行 GPU 数")
     pipeline_parallel_size: int = Field(1, description="流水线并行 GPU 数")
+    temperature: float = Field(0.7, description="生成温度")
+    max_tokens: int = Field(2048, description="最大生成 token 数")
 
 
 class InferenceEngine:
-    """vLLM 推理引擎，API 与 llama_cpp 版本兼容。"""
-
     def __init__(self, config: InferenceConfig):
         self.config = config
-        self.llm: Optional[Any] = None  # vllm.LLM 实例
-        self.tokenizer: Optional[Any] = None
-        self._init_llm()
+        self.model = None
+        self.tokenizer = None
+        self.sampling_params = SamplingParams(
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+            stop=["<|im_end|>", "</s>"],
+        )
+        self._load_model()
 
-    def _init_llm(self):
-        try:
-            # 延迟导入，避免 vLLM 未安装时影响其他模块
-            from vllm import LLM
-            from transformers import AutoTokenizer
-
-            # 规范化模型路径：相对路径转绝对路径，避免 vLLM 误判为 HF repo id
-            model_path = self.config.model_path
-            if model_path.startswith("./") or model_path.startswith("../"):
-                model_path = os.path.abspath(model_path)
-            logger.info(f"Loading model from {model_path}")
-            logger.info(f"Context: {self.config.n_ctx}, dtype: {self.config.dtype}")
-            logger.info(f"GPU memory utilization: {self.config.gpu_memory_utilization}")
-            logger.info(f"Tensor parallel: {self.config.tensor_parallel_size}, "
-                        f"Pipeline parallel: {self.config.pipeline_parallel_size}")
-
-            # 加载 tokenizer（用于 chat template）
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                model_path,
-                trust_remote_code=self.config.trust_remote_code,
-            )
-
-            # 加载 vLLM 引擎
-            self.llm = LLM(
-                model=model_path,
-                max_model_len=self.config.n_ctx,
-                gpu_memory_utilization=self.config.gpu_memory_utilization,
-                dtype=self.config.dtype,
-                trust_remote_code=self.config.trust_remote_code,
-                # ROCm 优化
-                enforce_eager=False,  # 启用 CUDA graph（ROCm 也支持）
-                tensor_parallel_size=self.config.tensor_parallel_size,
-                pipeline_parallel_size=self.config.pipeline_parallel_size,
-            )
-            logger.info("Model loaded successfully (vLLM + ROCm)")
-
-        except ImportError as e:
-            logger.error(f"vLLM not installed: {e}")
-            raise RuntimeError(
-                "vLLM is not installed. Install with:\n"
-                "  pip install vllm --extra-index-url https://wheels.vllm.ai/rocm/\n"
-                "Or run install_rocm.sh"
-            )
-        except Exception as e:
-            logger.error(f"Failed to load model: {str(e)}")
-            raise
-
-    def generate(self, prompt: str, **kwargs) -> str:
-        """文本生成（非 chat 格式）。
-
-        Args:
-            prompt: 输入文本
-            **kwargs: max_tokens, temperature 等
-
-        Returns:
-            生成的文本
-        """
-        if not self.llm:
-            raise RuntimeError("LLM engine not initialized")
-
-        from vllm import SamplingParams
-
-        max_tokens = kwargs.get("max_tokens", self.config.max_tokens)
-        temperature = kwargs.get("temperature", self.config.temperature)
-
-        sampling_params = SamplingParams(
-            max_tokens=max_tokens,
-            temperature=temperature,
-            stop=["<|im_end|>", "</s>", "```", "\n\n\n"],
+    def _load_model(self):
+        # 规范化模型路径：相对路径转绝对路径，避免 vLLM / AutoTokenizer
+        # 误判为 HF repo id 而尝试联网下载。
+        model_path = self.config.model_path
+        if model_path.startswith("./") or model_path.startswith("../"):
+            model_path = os.path.abspath(model_path)
+        logger.info(f"正在加载模型: {model_path}")
+        logger.info(
+            f"Context: {self.config.n_ctx}, dtype: {self.config.dtype}, "
+            f"TP: {self.config.tensor_parallel_size}, PP: {self.config.pipeline_parallel_size}"
         )
 
+        from transformers import AutoTokenizer
+
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            model_path,
+            trust_remote_code=True,
+        )
+        self.model = LLM(
+            trust_remote_code=True,
+            model=model_path,
+            dtype=self.config.dtype,
+            gpu_memory_utilization=self.config.gpu_memory_utilization,
+            tensor_parallel_size=self.config.tensor_parallel_size,
+            pipeline_parallel_size=self.config.pipeline_parallel_size,
+            max_model_len=self.config.n_ctx,
+        )
+        logger.info("✅ 模型加载完成")
+
+    def _build_sampling_params(
+        self,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+    ) -> SamplingParams:
+        if max_tokens is None and temperature is None:
+            return self.sampling_params
+        return SamplingParams(
+            temperature=self.config.temperature if temperature is None else temperature,
+            max_tokens=self.config.max_tokens if max_tokens is None else max_tokens,
+            stop=["<|im_end|>", "</s>"],
+        )
+
+    def generate(
+        self,
+        prompt: str,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+    ) -> str:
+        """文本生成（非 chat 格式）。"""
+        if not self.model:
+            raise RuntimeError("LLM engine not initialized")
+        sampling_params = self._build_sampling_params(max_tokens, temperature)
         try:
-            outputs = self.llm.generate([prompt], sampling_params)
-            return outputs[0].outputs[0].text.strip()
+            outputs = self.model.generate([prompt], sampling_params)
+            return outputs[0].outputs[0].text
         except Exception as e:
             logger.error(f"Inference error: {str(e)}")
             raise
 
-    def chat_completion(self, messages: List[Dict[str, str]], **kwargs) -> str:
+    def chat(
+        self,
+        messages: List[Dict[str, str]],
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+    ) -> str:
         """Chat 对话补全。
 
-        使用 vLLM 原生的 chat() 方法，自动处理 chat template。
-
-        Args:
-            messages: [{"role": "system/user/assistant", "content": "..."}]
-            **kwargs: max_tokens, temperature 等
-
-        Returns:
-            生成的回复文本
+        不使用 vLLM 原生 chat template，而是将 messages 拼接成纯文本 prompt：
+            role: content
+            role: content
+            assistant:
+        再调用 generate() 做原始补全。
         """
-        if not self.llm:
-            raise RuntimeError("LLM engine not initialized")
+        prompt = ""
+        for m in messages:
+            role = m.get("role", "user")
+            content = m.get("content", "")
+            prompt += f"{role}: {content}\n"
+        prompt += "assistant: "
+        return self.generate(prompt, max_tokens=max_tokens, temperature=temperature)
 
-        from vllm import SamplingParams
-
-        max_tokens = kwargs.get("max_tokens", self.config.max_tokens)
-        temperature = kwargs.get("temperature", self.config.temperature)
-
-        sampling_params = SamplingParams(
-            max_tokens=max_tokens,
-            temperature=temperature,
-            stop=["<|im_end|>", "</s>"],
-        )
-
-        try:
-            # vLLM 0.25+ 原生支持 chat()，自动 apply chat template
-            outputs = self.llm.chat(messages, sampling_params)
-            return outputs[0].outputs[0].text.strip()
-        except Exception as e:
-            logger.error(f"Chat completion error: {str(e)}")
-            raise
+    # 向后兼容别名：旧调用方（agent/core.py、scripts/benchmark.py）使用 chat_completion
+    def chat_completion(
+        self,
+        messages: List[Dict[str, str]],
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+    ) -> str:
+        return self.chat(messages, max_tokens=max_tokens, temperature=temperature)
 
     def get_model_info(self) -> Dict[str, Any]:
-        if not self.llm:
-            return {"status": "not_initialized"}
-
         return {
-            "status": "loaded",
+            "status": "loaded" if self.model else "not_initialized",
             "engine": "vLLM",
             "model_path": self.config.model_path,
             "n_ctx": self.config.n_ctx,
@@ -190,7 +147,7 @@ class InferenceEngine:
         }
 
     def unload(self):
-        if self.llm:
-            del self.llm
-            self.llm = None
+        if self.model:
+            del self.model
+            self.model = None
             logger.info("Model unloaded")

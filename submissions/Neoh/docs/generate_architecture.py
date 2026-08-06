@@ -150,7 +150,7 @@ def main():
     # 6. Inference Layer
     draw_box(ax, 4.0, LAYER_Y[5], 2.8, 0.9, "vLLM Engine\nROCm backend", LAYER_COLORS[5])
     draw_box(ax, 7.8, LAYER_Y[5], 2.8, 0.9, "Qwen2.5-14B-Instruct\nFP16 safetensors", LAYER_COLORS[5])
-    draw_box(ax, 11.6, LAYER_Y[5], 2.8, 0.9, "ROCm 7.2.1\ngfx1100 override", LAYER_COLORS[5])
+    draw_box(ax, 11.6, LAYER_Y[5], 2.8, 0.9, "ROCm 7.14\ngfx1100 override", LAYER_COLORS[5])
 
     # 7. Hardware Layer
     draw_box(ax, 7.3, LAYER_Y[6], 6.0, 0.9,

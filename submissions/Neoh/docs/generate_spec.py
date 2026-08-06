@@ -263,8 +263,9 @@ def main():
 
     pdf.chapter_subtitle("5.2 Deployment Environment")
     pdf.body_text(
-        "Target platform: Linux (Ubuntu 22.04+) with ROCm 7.0+ and an AMD Radeon GPU. Testing was performed on AMD Radeon Cloud with a Radeon Pro W7900 (48 GB VRAM, gfx1100). "
-        "vLLM is installed from the official ROCm pre-built wheel. Because W7900/RX 7900 are gfx1100 consumer/professional cards, the environment variables HSA_OVERRIDE_GFX_VERSION=11.0.0 and PYTORCH_ROCM_ARCH=gfx1100 must be set before importing vLLM/torch."
+        "Target platform: Linux (Ubuntu 22.04+) with ROCm 7.14 and an AMD Radeon GPU. Testing was performed on AMD Radeon Cloud with a Radeon Pro W7900D (48 GB VRAM, gfx1100). "
+        "The deep-learning stack (torch / vllm / flash-attn) is installed only from AMD ROCm sources (repo.amd.com, rocm.frameworks.amd.com) via install_rocm.sh - CUDA builds are blacklisted. "
+        "Because W7900/RX 7900 are gfx1100 cards, the environment variables HSA_OVERRIDE_GFX_VERSION=11.0.0 and PYTORCH_ROCM_ARCH=gfx1100 (plus FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE and the ROCm SDK PYTHONPATH) must be set before importing vLLM/torch."
     )
 
     pdf.chapter_subtitle("5.3 Deployment Steps")
@@ -277,7 +278,7 @@ def main():
     pdf.add_page()
     pdf.chapter_title("6. Performance & Optimization")
     pdf.body_text(
-        "Measured on AMD Radeon Cloud (Radeon Pro W7900, 48 GB VRAM, single GPU, ROCm 7.2.1, vLLM 0.25.1):"
+        "Measured on AMD Radeon Cloud (Radeon Pro W7900D, 48 GB VRAM, single GPU, ROCm 7.14, vLLM 0.23.1, Python 3.14):"
     )
     pdf.set_font("Helvetica", "B", 9)
     pdf.set_fill_color(230, 230, 230)

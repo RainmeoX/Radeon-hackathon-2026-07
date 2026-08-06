@@ -48,16 +48,19 @@ cd Radeon-hackathon-2026-07/submissions/Neoh
 ## 3. 安装依赖 + vLLM(ROCm)
 
 ```bash
-cd submissions/Neoh        # 或你上传的目录
+cd submissions/Neoh # 或你上传的目录
 bash install_rocm.sh
 ```
 
-`install_rocm.sh` 会：设置 gfx1100 环境变量 → `pip install -r requirements.txt` → 安装 vLLM 的 ROCm 预编译 wheel → 验证 `torch.cuda.is_available()` 与 vLLM 导入。
+`install_rocm.sh` 会：创建 Python 3.14 venv（`/opt/venv314`）→ 从 AMD ROCm 源安装 `torch`/`torchvision`/`torchaudio`（7.14, gfx1100）、`flash-attn 2.8.3`、`vLLM 0.23.1`（ROCm wheel）→ 安装其余 CPU 侧依赖 → 构建 glibc 2.35 兼容 shim → 校验为 ROCm 构建且 `torch.cuda.is_available()` 可用。
 
-> ⚠️ 若验证步骤报 “torch 不是 ROCm 版”，手动装 ROCm 版 PyTorch 后重跑：
+> **ROCm-only — CUDA 已拉黑。** 本环境无任何 NVIDIA GPU / CUDA 运行时。若校验报 “torch 不是 ROCm 版” 或 `libcuda.so.1` 缺失，说明误装了 CUDA 构建。**切勿**用 `download.pytorch.org/whl/rocm6.2` 或 `wheels.vllm.ai/rocm/` 这些旧源（它们已不再托管对应版本，且易误拉 CUDA）。直接用 `install_rocm.sh` 里的 AMD ROCm 7.14 源（脚本内已含完整命令与注释）：
 > ```bash
-> pip install torch --index-url https://download.pytorch.org/whl/rocm6.2
-> pip install vllm --extra-index-url https://wheels.vllm.ai/rocm/
+> uv pip install --index-url https://repo.amd.com/rocm/whl-multi-arch/ \
+> "torch[device-gfx1100]==2.11.0+rocm7.14.0" \
+> "torchvision[device-gfx1100]==0.26.0+rocm7.14.0" \
+> "torchaudio==2.11.0+rocm7.14.0"
+> uv pip install https://rocm.frameworks.amd.com/whl-multi-arch/vllm-rdna/vllm/vllm-0.23.1.dev1%2Brocm7.14.0.g9ddef7117.d20260715-cp314-cp314-linux_x86_64.whl
 > ```
 
 ---

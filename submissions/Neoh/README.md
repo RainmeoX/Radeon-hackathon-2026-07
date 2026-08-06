@@ -63,37 +63,37 @@ The system is organized into layers:
 
 ```
 submissions/Neoh/
-├── agent/                  # Agent core
-│   ├── core.py             # RadeonAgent main loop
-│   ├── planner.py          # Task decomposition
-│   ├── executor.py         # Step execution with HITL approval
-│   ├── reflector.py        # Result evaluation
-│   ├── audit.py            # Audit logger (JSON-Lines)
-│   └── prompts.py          # System prompt templates (generic / hardware)
-├── inference/              # LLM inference
-│   ├── engine.py           # vLLM wrapper
-│   └── model_loader.py     # Multi-source model downloader
-├── memory/                 # Memory & RAG
-│   ├── manager.py          # Memory manager
-│   ├── vector_store.py     # FAISS vector store
-│   └── document_parser.py  # PDF / DOCX / MD / TXT parser (tables extracted from PDF)
-├── tools/                  # Tool registry
-│   ├── registry.py         # Tool registration center
-│   ├── file_tools.py       # File operations
-│   ├── shell_tools.py      # Command execution
-│   ├── code_tools.py       # Code interpreter
-│   ├── system_tools.py     # System info
-│   └── hardware_tools.py   # Hardware R&D tools (Verilog / testbench generation)
+├── agent/ # Agent core
+│ ├── core.py # RadeonAgent main loop
+│ ├── planner.py # Task decomposition
+│ ├── executor.py # Step execution with HITL approval
+│ ├── reflector.py # Result evaluation
+│ ├── audit.py # Audit logger (JSON-Lines)
+│ └── prompts.py # System prompt templates (generic / hardware)
+├── inference/ # LLM inference
+│ ├── engine.py # vLLM wrapper
+│ └── model_loader.py # Multi-source model downloader
+├── memory/ # Memory & RAG
+│ ├── manager.py # Memory manager
+│ ├── vector_store.py # FAISS vector store
+│ └── document_parser.py # PDF / DOCX / MD / TXT parser (tables extracted from PDF)
+├── tools/ # Tool registry
+│ ├── registry.py # Tool registration center
+│ ├── file_tools.py # File operations
+│ ├── shell_tools.py # Command execution
+│ ├── code_tools.py # Code interpreter
+│ ├── system_tools.py # System info
+│ └── hardware_tools.py # Hardware R&D tools (Verilog / testbench generation)
 ├── ui/
-│   └── web_app.py          # Streamlit frontend
+│ └── web_app.py # Streamlit frontend
 ├── scripts/
-│   ├── download_model.py   # Model download CLI
-│   ├── init_rag.py         # General RAG initialization CLI
-│   └── init_hardware_rag.py # Hardware knowledge-base initialization CLI
-├── app.py                  # Entry point (web / cli)
-├── config.yaml             # Configuration
-├── requirements.txt        # Python dependencies
-├── install_rocm.sh         # Linux install script
+│ ├── download_model.py # Model download CLI
+│ ├── init_rag.py # General RAG initialization CLI
+│ └── init_hardware_rag.py # Hardware knowledge-base initialization CLI
+├── app.py # Entry point (web / cli)
+├── config.yaml # Configuration
+├── requirements.txt # Python dependencies
+├── install_rocm.sh # Linux install script
 └── .gitignore
 ```
 
@@ -113,11 +113,15 @@ submissions/Neoh/
 ### Software
 
 - **OS:** Ubuntu 22.04+ (ROCm); Windows via WSL2
-- **Python:** 3.10 – 3.12
-- **ROCm:** 7.0+ (7.2.1 used in testing)
-- **vLLM:** ROCm pre-built wheel
+- **Python:** 3.14
+- **ROCm:** 7.14 (tested)
+- **vLLM:** 0.23.1.dev1+rocm7.14.0 (ROCm pre-built wheel, Python 3.14)
+- **torch / torchvision / torchaudio:** 2.11.0 / 0.26.0 / 2.11.0 +rocm7.14.0
+- **flash-attn:** 2.8.3 (ROCm build)
 
-> **Note on gfx1100:** W7900 / RX 7900 are gfx1100. vLLM must be told to recognize them via `HSA_OVERRIDE_GFX_VERSION=11.0.0` (set automatically in `app.py` / `engine.py`). Windows desktop cannot run ROCm inference — use Linux + AMD GPU (e.g. Radeon Cloud).
+> **ROCm-only — CUDA is blacklisted.** This is an AMD ROCm environment with no NVIDIA GPU / CUDA runtime. The deep-learning stack (torch / vllm / flash-attn / xformers) must come **only** from AMD ROCm sources (`repo.amd.com`, `rocm.frameworks.amd.com`), never from PyPI / Tsinghua (those serve CUDA wheels that fail with `libcuda.so.1`). Do **not** run `pip install -r requirements.txt` for the DL stack — use `install_rocm.sh` (the exact commands are baked into that script).
+>
+> **Note on gfx1100:** W7900 / RX 7900 are gfx1100. vLLM must be told to recognize them via `HSA_OVERRIDE_GFX_VERSION=11.0.0` (set automatically in `app.py` / `scripts/serve.py`). Windows desktop cannot run ROCm inference — use Linux + AMD GPU (e.g. Radeon Cloud).
 
 ---
 
@@ -130,18 +134,20 @@ git clone https://github.com/RainmeoX/Radeon-hackathon-2026-07.git
 cd Radeon-hackathon-2026-07/submissions/Neoh
 ```
 
-### Step 2: Virtual environment
+### Step 2: Virtual environment (Python 3.14)
 
 ```bash
-python -m venv venv
-source venv/bin/activate        # Linux
-# venv\Scripts\activate         # Windows
+# 推荐用 uv 创建 Python 3.14 venv（install_rocm.sh 默认目标 /opt/venv314）
+uv python install 3.14
+uv venv --python 3.14 /opt/venv314
+source /opt/venv314/bin/activate # Linux
+# venv\Scripts\activate # Windows (WSL2 内亦可用)
 ```
 
 ### Step 3: Install vLLM (ROCm wheel)
 
 ```bash
-bash install_rocm.sh        # Linux / WSL2
+bash install_rocm.sh # Linux / WSL2
 ```
 
 Installs dependencies and `vllm` from the official ROCm pre-built wheel.
@@ -170,7 +176,7 @@ Edit `config.yaml`. Notable fields:
 
 ```yaml
 model:
-  path: "./models/Qwen2.5-14B-Instruct"   # 7B also works
+  path: "./models/Qwen2.5-14B-Instruct" # 7B also works
   engine: vllm
   n_ctx: 8192
   gpu_memory_utilization: 0.90
@@ -180,12 +186,12 @@ model:
 agent:
   max_iterations: 10
   memory_enabled: true
-  prompt_template: "hardware"   # "hardware" (default) or "generic"
+  prompt_template: "hardware" # "hardware" (default) or "generic"
   tools:
     - read_file / write_file / delete_file / list_directory / create_directory
     - execute_command / execute_python / code_interpreter / format_code
     - get_system_info / get_gpu_info / get_process_list
-    - generate_verilog / generate_testbench   # hardware specialization
+    - generate_verilog / generate_testbench # hardware specialization
 
 rag:
   vector_store: "faiss"
@@ -242,7 +248,7 @@ PDF tables (pin tables, parameter tables) are extracted and indexed so they beco
 | Radeon Pro W7900 | Qwen2.5-14B FP16 | ~27.5 tokens/s (measured) | ~30 GB |
 | Radeon Pro W7900 | Qwen2.5-7B FP16 | ~46 tokens/s (measured) | ~15 GB |
 
-Measured on AMD Radeon Cloud (Radeon Pro W7900, 48 GB VRAM, single GPU, ROCm 7.2.1, vLLM 0.25.1).
+Measured on AMD Radeon Cloud (Radeon Pro W7900D, 48 GB VRAM, single GPU, ROCm 7.14, vLLM 0.23.1, Python 3.14).
 
 ---
 
@@ -256,9 +262,7 @@ Measured on AMD Radeon Cloud (Radeon Pro W7900, 48 GB VRAM, single GPU, ROCm 7.2
 
 ## Dependencies
 
-See `requirements.txt`. Key packages: `vllm` (ROCm wheel), `faiss`, `sentence-transformers`, `streamlit`, `pdfplumber`, `python-docx`, `psutil`, `pydantic`, `pyyaml`.
-
-> **Note:** `vllm` is installed via `install_rocm.sh` / `install_rocm.bat` using the official ROCm wheel repository (`https://wheels.vllm.ai/rocm/`).
+See `requirements.txt`. Key CPU-side packages: `faiss`, `sentence-transformers`, `streamlit`, `pdfplumber`, `python-docx`, `psutil`, `pydantic`, `pyyaml`. The deep-learning stack (`torch`, `vllm`, `flash-attn`, `transformers`) is installed by `install_rocm.sh` from AMD ROCm sources only — never via plain `pip` (which would pull CUDA builds).
 
 ---
 
