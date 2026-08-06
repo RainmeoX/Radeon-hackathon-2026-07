@@ -36,115 +36,163 @@ st.set_page_config(
     page_icon="🤖",
     layout="wide",
     # 深色主题通过 .streamlit/config.toml 设置（Streamlit 1.61+ 已从
-    # set_page_config 移除 theme 参数），避免浏览器暗色模式下整页发白。
+    # set_page_config 移除 theme 参数）。亮/暗切换由下方 CSS 变量实现。
 )
 
 # ---------------------------------------------------------------------------
-# ChatGPT / Codex 风格深色界面：清晰边界、区分用户/助手、可见输入框
+# ChatGPT / Codex 风格界面：用 CSS 变量实现 亮/暗 双色，清晰边界、区分消息
+# 调色板取 ChatGPT 官方 web 设计 token（暗：主区 #343541 / 侧栏 #202123 /
+# 输入框 #40414f；亮：主区 #ffffff / 侧栏 #f7f7f8）
 # ---------------------------------------------------------------------------
-CSS = """
-<style>
-#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; }
-
-/* 应用底：最深的黑，作为侧栏/背景层 */
-.stApp {
-    background: #0a0c10 !important;
-    color: #e6edf3 !important;
+THEMES = {
+    "dark": {
+        "bg_app": "#202123",
+        "bg_sidebar": "#202123",
+        "bg_main": "#343541",
+        "bg_surface": "#40414f",
+        "bg_msg_user": "#40414f",
+        "bg_msg_asst": "#343541",
+        "border": "#4d4d4f",
+        "border_strong": "#565869",
+        "text": "#ececf1",
+        "text_dim": "#c5c5d2",
+        "accent": "#ff6b6b",
+        "accent_blue": "#58a6ff",
+    },
+    "light": {
+        "bg_app": "#f7f7f8",
+        "bg_sidebar": "#f7f7f8",
+        "bg_main": "#ffffff",
+        "bg_surface": "#ffffff",
+        "bg_msg_user": "#f4f4f5",
+        "bg_msg_asst": "#ffffff",
+        "border": "#e5e5e5",
+        "border_strong": "#d0d0d8",
+        "text": "#353740",
+        "text_dim": "#8e8ea0",
+        "accent": "#e5484d",
+        "accent_blue": "#2563eb",
+    },
 }
 
-/* 主内容作为独立的对话表面（比背景浅一号，有左右边界） */
+_theme = st.session_state.get("theme", "dark")
+if _theme not in THEMES:
+    _theme = "dark"
+_p = THEMES[_theme]
+
+VARS = """
+:root {{
+  --bg-app: {bg_app};
+  --bg-sidebar: {bg_sidebar};
+  --bg-main: {bg_main};
+  --bg-surface: {bg_surface};
+  --bg-msg-user: {bg_msg_user};
+  --bg-msg-asst: {bg_msg_asst};
+  --border: {border};
+  --border-strong: {border_strong};
+  --text: {text};
+  --text-dim: {text_dim};
+  --accent: {accent};
+  --accent-blue: {accent_blue};
+}}
+""".format(**_p)
+
+CSS = "<style>\n" + VARS + """
+#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; }
+
+/* 应用底 / 侧栏背景层 */
+.stApp { background: var(--bg-app) !important; color: var(--text) !important; }
+
+/* 主对话列：比背景亮一号，有左右边界（ChatGPT 风格居中列） */
 .block-container {
     max-width: 920px;
     margin: 0 auto;
     padding-top: 0;
     padding-bottom: 120px;
     min-height: 100vh;
-    background: #13161d !important;
-    border-left: 1px solid #22262e !important;
-    border-right: 1px solid #22262e !important;
+    background: var(--bg-main) !important;
+    border-left: 1px solid var(--border) !important;
+    border-right: 1px solid var(--border) !important;
 }
 
-/* 顶部品牌栏：清晰分隔，浅色表面 + 底部描边 */
+/* 顶部品牌栏：清晰分隔，仅品牌名（无标语） */
 .topbar {
-    background: #1a1e26;
-    border-bottom: 1px solid #2f3640;
-    color: #f0f2f5;
-    padding: 16px 24px;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    padding: 14px 24px;
     margin-bottom: 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 .topbar .brand { font-size: 18px; font-weight: 700; letter-spacing: .2px; }
-.topbar .brand span { color: #ff6b6b; font-weight: 600; }
-.topbar .tag { font-size: 12px; color: #9aa3b2; text-align: right; line-height: 1.4; }
+.topbar .brand span { color: var(--accent); font-weight: 600; }
 
-/* 侧栏：比主内容更深的表面 */
-section[data-testid="stSidebar"] {
-    background: #0d1117 !important;
-}
+/* 侧栏 */
+section[data-testid="stSidebar"] { background: var(--bg-sidebar) !important; }
 section[data-testid="stSidebar"] > div:first-child {
-    background: #0d1117 !important;
-    border-right: 1px solid #232831 !important;
+    background: var(--bg-sidebar) !important;
+    border-right: 1px solid var(--border) !important;
 }
+section[data-testid="stSidebar"] * { color: var(--text) !important; }
 section[data-testid="stSidebar"] .stButton > button {
-    background: #181b22; color: #e6edf3; border: 1px solid #2c313a;
-    border-radius: 8px; font-weight: 600; width: 100%;
-    transition: all .15s ease;
+    background: var(--bg-surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; font-weight: 600; width: 100%; transition: all .15s ease;
 }
 section[data-testid="stSidebar"] .stButton > button:hover {
-    background: #22262f; border-color: #3d4552;
+    border-color: var(--border-strong); background: var(--bg-main);
 }
+section[data-testid="stSidebar"] .stRadio label,
+section[data-testid="stSidebar"] .stToggle label,
+section[data-testid="stSidebar"] .stCheckbox label { color: var(--text) !important; }
+section[data-testid="stSidebar"] .stFileUploader { border-color: var(--border) !important; }
+section[data-testid="stSidebar"] .stCaption { color: var(--text-dim) !important; }
+section[data-testid="stSidebar"] .stDivider { border-color: var(--border) !important; }
+
+/* 侧栏分区小标题 */
+.sb-section { font-size: 12px; font-weight: 700; letter-spacing: .6px;
+    text-transform: uppercase; color: var(--text-dim); margin: 4px 0 6px; }
 
 /* 知识库计数徽标 */
 .kb-badge {
-    display: inline-block; background: #1f6feb22; color: #58a6ff;
-    border: 1px solid #1f6feb55; border-radius: 20px;
-    padding: 2px 12px; font-size: 13px; font-weight: 600;
+    display: inline-block;
+    background: color-mix(in srgb, var(--accent-blue) 16%, transparent);
+    color: var(--accent-blue);
+    border: 1px solid color-mix(in srgb, var(--accent-blue) 38%, transparent);
+    border-radius: 20px; padding: 2px 12px; font-size: 13px; font-weight: 600;
 }
 
-/* 聊天气泡：清晰边界 + 阴影 */
+/* 聊天气泡：清晰边界 */
 .stChatMessage {
-    border-radius: 16px !important;
-    padding: 14px 18px !important;
-    margin-bottom: 14px !important;
-    border: 1px solid #2f3640 !important;
-    background: #1a1d25 !important;
-    color: #e6edf3 !important;
+    border-radius: 16px !important; padding: 14px 18px !important;
+    margin-bottom: 14px !important; border: 1px solid var(--border) !important;
+    background: var(--bg-msg-asst) !important; color: var(--text) !important;
     box-shadow: 0 2px 6px rgba(0,0,0,0.18) !important;
 }
 .stChatMessage[data-testid="stChatMessageContent"] { background: transparent !important; }
-
 /* 用户消息：右对齐、明显填充 */
 .stChatMessage:has([data-testid="stChatMessageAvatarUser"]) {
-    background: #2b303a !important;
-    border-color: #3c424d !important;
+    background: var(--bg-msg-user) !important; border-color: var(--border-strong) !important;
     margin-left: 60px !important;
 }
-/* 助手消息：左对齐、稍浅背景 */
+/* 助手消息：左对齐，贴主区背景 */
 .stChatMessage:has([data-testid="stChatMessageAvatarAssistant"]) {
-    background: #161920 !important;
-    border-color: #252b35 !important;
+    background: var(--bg-msg-asst) !important; border-color: var(--border) !important;
     margin-right: 60px !important;
 }
 
 /* 来源展开 */
-.streamlit-expanderHeader { font-size: 13px; color: #8b949e !important; }
+.streamlit-expanderHeader { font-size: 13px; color: var(--text-dim) !important; }
 
 /* 输入框容器：高对比圆角卡片，始终可见 */
 .stChatInput {
-    background: #1f242d !important;
-    border: 1px solid #4a505a !important;
-    border-radius: 18px !important;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.35) !important;
+    background: var(--bg-surface) !important; border: 1px solid var(--border-strong) !important;
+    border-radius: 18px !important; box-shadow: 0 4px 18px rgba(0,0,0,0.22) !important;
     padding: 8px 12px !important;
 }
-.stChatInput textarea {
-    background: transparent !important;
-    color: #e6edf3 !important;
-    border: none !important;
-    font-size: 15px !important;
-}
+.stChatInput textarea { background: transparent !important; color: var(--text) !important;
+    border: none !important; font-size: 15px !important; }
 </style>
 """
 
@@ -154,7 +202,6 @@ st.markdown(
     """
     <div class="topbar">
       <div class="brand">🤖 Bedrock <span>· Hardware R&D Assistant</span></div>
-      <div class="tag">100% local inference on AMD Radeon (ROCm)<br/>No external API · Your docs never leave this machine</div>
     </div>
     """,
     unsafe_allow_html=True,
@@ -164,10 +211,10 @@ st.markdown(
 if len(st.session_state.get("messages", [])) == 0:
     st.markdown(
         """
-        <div style="text-align:center; margin-top: 7vh; color:#8b949e;">
+        <div style="text-align:center; margin-top: 7vh; color: var(--text-dim);">
             <div style="font-size:48px; margin-bottom:14px;">🤖</div>
-            <div style="font-size:26px; font-weight:700; color:#e6edf3; margin-bottom:8px;">Bedrock</div>
-            <div style="font-size:14px; margin-bottom:36px;">Hardware R&D Assistant · 100% local inference on AMD Radeon</div>
+            <div style="font-size:26px; font-weight:700; color: var(--text); margin-bottom:8px;">Bedrock</div>
+            <div style="font-size:14px; margin-bottom:36px;">Hardware R&D Assistant</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -234,10 +281,32 @@ def init_agent():
 
 
 # ---------------------------------------------------------------------------
-# 侧栏：控制面板
+# 侧栏：控制面板（分区清晰）
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("### Assistant mode")
+    st.markdown(
+        '<div style="font-size:15px;font-weight:700;color:var(--text);">'
+        '🤖 Bedrock</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("Hardware R&D Assistant")
+
+    st.divider()
+
+    # ---- Appearance（亮/暗切换）----
+    st.markdown('<div class="sb-section">Appearance</div>', unsafe_allow_html=True)
+    if "theme" not in st.session_state:
+        st.session_state.theme = "dark"
+    dark_on = st.toggle("Dark mode", value=(st.session_state.theme == "dark"))
+    new_theme = "dark" if dark_on else "light"
+    if new_theme != st.session_state.theme:
+        st.session_state.theme = new_theme
+        st.rerun()
+
+    st.divider()
+
+    # ---- Assistant mode ----
+    st.markdown('<div class="sb-section">Assistant mode</div>', unsafe_allow_html=True)
     if "mode" not in st.session_state:
         st.session_state.mode = "Hardware R&D"
     new_mode = st.radio(
@@ -253,7 +322,8 @@ with st.sidebar:
 
     st.divider()
 
-    st.markdown("### Knowledge base")
+    # ---- Knowledge base ----
+    st.markdown('<div class="sb-section">Knowledge base</div>', unsafe_allow_html=True)
     try:
         doc_count = init_memory().get_document_count()
     except Exception:
@@ -262,8 +332,7 @@ with st.sidebar:
         f'Indexed chunks: <span class="kb-badge">{doc_count}</span>',
         unsafe_allow_html=True,
     )
-
-    st.markdown("Upload documents — they are indexed automatically (PDF / DOCX / MD / TXT).")
+    st.markdown("Upload PDF / DOCX / MD / TXT — indexed automatically.")
     uploaded_files = st.file_uploader(
         "Upload documents",
         type=["pdf", "docx", "md", "txt"],
@@ -300,6 +369,8 @@ with st.sidebar:
 
     st.divider()
 
+    # ---- Actions ----
+    st.markdown('<div class="sb-section">Actions</div>', unsafe_allow_html=True)
     if st.button("Clear document index"):
         init_memory().clear_long_term_memory()
         st.session_state.processed_docs = set()
@@ -316,7 +387,8 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.caption("All inference runs locally on AMD Radeon via vLLM + ROCm.")
+    st.caption("100% local on AMD Radeon · vLLM + ROCm")
+
 
 # ---------------------------------------------------------------------------
 # 对话区
