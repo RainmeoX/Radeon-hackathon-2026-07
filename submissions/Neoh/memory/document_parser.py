@@ -65,12 +65,19 @@ class DocumentParser:
         return "[TABLE]\n" + "\n".join(rows)
 
     def _parse_docx(self, file_path: str) -> List[str]:
+        """解析 DOCX：正文合成整篇文本 + 表格单独抽取。
+
+        正文不能逐段返回：一段一 chunk 会把「Supply voltage: 1.8 V to 3.6 V」这类
+        关键参数行切成几个词的碎片，检索时排不进 top-k。表格（引脚表 / 电气参数表）
+        与 PDF 一样用 [TABLE] 标记单独入库。
+        """
         doc = docx.Document(file_path)
-        texts = []
-        for paragraph in doc.paragraphs:
-            text = paragraph.text.strip()
-            if text:
-                texts.append(text)
+        paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
+        texts = ["\n".join(paragraphs)] if paragraphs else []
+        for table in doc.tables:
+            rows = [[cell.text for cell in row.cells] for row in table.rows]
+            if rows:
+                texts.append(self._format_table(rows))
         return texts
 
     def _parse_markdown(self, file_path: str) -> List[str]:
@@ -136,6 +143,8 @@ class DocumentParser:
         documents = []
         for i, chunk in enumerate(all_chunks):
             metadata = {
+                # source 与 file_name 同值：前端引用展示按 source 取，保留 file_name 兼容旧索引
+                "source": os.path.basename(file_path),
                 "file_name": os.path.basename(file_path),
                 "chunk_index": i,
                 "total_chunks": len(all_chunks),

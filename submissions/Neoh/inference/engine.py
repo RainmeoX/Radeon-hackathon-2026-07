@@ -6,7 +6,8 @@
 
 API：
 - generate(prompt, **kwargs) -> str         原始文本补全
-- chat(messages, **kwargs) -> str           将 messages 拼成 "role: content\\n" 文本后补全
+- chat(messages, **kwargs) -> str           用模型自带 chat template（Qwen2.5 为 ChatML）
+                                            渲染 messages 后补全
 - chat_completion(messages, **kwargs) -> str  chat 的向后兼容别名
 - get_model_info() -> dict / unload()       状态查询与卸载
 """
@@ -31,6 +32,15 @@ class InferenceConfig(BaseModel):
     pipeline_parallel_size: int = Field(1, description="流水线并行 GPU 数")
     temperature: float = Field(0.7, description="生成温度")
     max_tokens: int = Field(2048, description="最大生成 token 数")
+    top_p: float = Field(0.8, description="核采样阈值（Qwen2.5 推荐 0.8）")
+    top_k: int = Field(20, description="top-k 采样（Qwen2.5 推荐 20）")
+    repetition_penalty: float = Field(
+        1.05, description="重复惩罚（Qwen2.5 推荐 1.05，防复读退化）"
+    )
+
+
+# 生成终止符：Qwen2.5 ChatML 用 <|im_end|>，兜底保留 <|endoftext|> 与 </s>
+STOP_TOKENS = ["<|im_end|>", "<|endoftext|>", "</s>"]
 
 
 class InferenceEngine:
@@ -38,11 +48,8 @@ class InferenceEngine:
         self.config = config
         self.model = None
         self.tokenizer = None
-        self.sampling_params = SamplingParams(
-            temperature=config.temperature,
-            max_tokens=config.max_tokens,
-            stop=["<|im_end|>", "</s>"],
-        )
+        self.sampling_params = None
+        self.sampling_params = self._build_sampling_params()
         self._load_model()
 
     def _load_model(self):
@@ -79,12 +86,15 @@ class InferenceEngine:
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
     ) -> SamplingParams:
-        if max_tokens is None and temperature is None:
+        if max_tokens is None and temperature is None and self.sampling_params is not None:
             return self.sampling_params
         return SamplingParams(
             temperature=self.config.temperature if temperature is None else temperature,
             max_tokens=self.config.max_tokens if max_tokens is None else max_tokens,
-            stop=["<|im_end|>", "</s>"],
+            top_p=self.config.top_p,
+            top_k=self.config.top_k,
+            repetition_penalty=self.config.repetition_penalty,
+            stop=STOP_TOKENS,
         )
 
     def generate(
@@ -112,19 +122,27 @@ class InferenceEngine:
     ) -> str:
         """Chat 对话补全。
 
-        不使用 vLLM 原生 chat template，而是将 messages 拼接成纯文本 prompt：
-            role: content
-            role: content
-            assistant:
-        再调用 generate() 做原始补全。
+        用模型自带的 chat template 渲染 messages（Qwen2.5-Instruct 为 ChatML），
+        再调用 generate() 补全。必须走模板：否则指令模型收不到 <|im_start|> 结构，
+        不会输出停止符 <|im_end|>，会一直生成到 max_tokens 并出现复读退化。
         """
+        return self.generate(
+            self._render_prompt(messages), max_tokens=max_tokens, temperature=temperature
+        )
+
+    def _render_prompt(self, messages: List[Dict[str, str]]) -> str:
+        """messages -> prompt 文本。优先用 tokenizer 的 chat template。"""
+        if self.tokenizer is not None:
+            try:
+                return self.tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+            except Exception as e:
+                logger.warning(f"chat template 渲染失败，回退纯文本拼接: {e}")
         prompt = ""
         for m in messages:
-            role = m.get("role", "user")
-            content = m.get("content", "")
-            prompt += f"{role}: {content}\n"
-        prompt += "assistant: "
-        return self.generate(prompt, max_tokens=max_tokens, temperature=temperature)
+            prompt += f"{m.get('role', 'user')}: {m.get('content', '')}\n"
+        return prompt + "assistant: "
 
     # 向后兼容别名：旧调用方（agent/core.py、scripts/benchmark.py）使用 chat_completion
     def chat_completion(

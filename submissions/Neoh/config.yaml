@@ -5,7 +5,8 @@ model:
   dtype: "float16"
   gpu_memory_utilization: 0.90
   n_ctx: 8192
-  temperature: 0.7
+  # 硬件问答以准确复述 Datasheet 数值为先，温度取低值抑制参数臆造
+  temperature: 0.3
   max_tokens: 4096
   # 多卡并行（需平台支持多 GPU 分配）
   # Radeon Cloud 单 pod 单卡，默认 1
@@ -35,6 +36,7 @@ agent:
     # 硬件研发特化工具（路径 B）
     - generate_verilog
     - generate_testbench
+    - simulate_verilog
 
 rag:
   vector_store: "faiss"

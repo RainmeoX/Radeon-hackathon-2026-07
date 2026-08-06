@@ -8,8 +8,9 @@
 设计要点：
 - 工具本身是无状态的纯函数（符合 registry 调用契约），通过 set_engine()
   注入全局推理引擎，由 RadeonAgent.__init__ 在构造时统一注入。
-- 生成采用「轻量方案」：LLM 直接产出代码文本（默认不接 iverilog 仿真，
-  仿真验证为可选后续）。模型被要求只输出裸代码、不带 ``` 标记，以避免
+- 生成采用「轻量方案」：LLM 直接产出代码文本；生成的代码可被 simulate_verilog
+  工具经本地 iverilog/vvp 仿真器真正编译并运行验证（工具链已随系统安装）。
+  模型被要求只输出裸代码、不带 ``` 标记，以避免
   InferenceEngine.generate 的 stop 列表（含 ```) 提前截断。
 """
 
@@ -57,7 +58,8 @@ _TESTBENCH_PROMPT = """你是一名资深数字电路验证工程师。请为下
 
 硬性要求：
 - 只输出 {lang} 代码本身，不要任何解释文字，不要使用 ``` 代码块标记
-- 包含时钟与复位生成（forever + #延时）、信号激励、必要的 $display / $stop
+- 包含时钟与复位生成（forever + #延时）、信号激励、必要的 $display / $finish
+- 必须以 $finish 结束（无头环境 vvp 不会进交互式暂停，仿真才能自动收尾）
 - 至少覆盖基本功能与 1~2 个边界情况
 - DUT 实例化名用 dut
 
@@ -177,6 +179,89 @@ def generate_testbench(dut_name: str, interface_description: str,
         return {"success": False, "error": str(e)}
 
 
+import subprocess  # noqa: E402  (放在文件中部以便 simulate_verilog 使用)
+
+
+def simulate_verilog(testbench_path: str, dut_path: Optional[str] = None,
+                    timeout: int = 60) -> Dict[str, Any]:
+    """用本地 iverilog/vvp 仿真器编译并运行 Verilog/SystemVerilog，验证生成代码。
+
+    这是把「未经验证的 HDL」短板补上的关键步骤：generate_verilog /
+    generate_testbench 产出的代码经此真正编译并跑通，确认可综合、可仿真。
+
+    Args:
+        testbench_path: 测试平台文件路径（.v / .sv），其 `module` 含 $finish 收尾
+        dut_path: 可选，被测设计文件路径；缺省时自动收集 testbench 同目录的
+            *.v / *.sv 一并编译（iverilog 需拿到 DUT 源）
+        timeout: 仿真超时秒数，防止 $finish 缺失导致 vvp 挂死
+    """
+    import glob
+    import tempfile
+
+    if not testbench_path or not os.path.exists(testbench_path):
+        return {"success": False, "passed": False,
+                "error": f"测试平台不存在: {testbench_path}"}
+
+    # 收集待编译源文件：testbench + 显式 DUT + 同目录其他 .v/.sv
+    sources = [os.path.abspath(testbench_path)]
+    if dut_path:
+        if not os.path.exists(dut_path):
+            return {"success": False, "passed": False,
+                    "error": f"DUT 文件不存在: {dut_path}"}
+        sources.append(os.path.abspath(dut_path))
+    else:
+        tb_dir = os.path.dirname(os.path.abspath(testbench_path))
+        for ext in ("*.v", "*.sv"):
+            for f in sorted(glob.glob(os.path.join(tb_dir, ext))):
+                af = os.path.abspath(f)
+                if af not in sources:
+                    sources.append(af)
+
+    out_file = os.path.join(tempfile.gettempdir(),
+                            f"sim_{os.getpid()}_{abs(hash(''.join(sources)))}.out")
+    cmd_compile = ["iverilog", "-g2012", "-o", out_file] + sources
+    try:
+        comp = subprocess.run(cmd_compile, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return {"success": False, "passed": False,
+                "error": f"编译超时（>{timeout}s）"}
+    except FileNotFoundError:
+        return {"success": False, "passed": False,
+                "error": "iverilog 未安装，无法仿真验证（请 apt-get install iverilog）"}
+
+    if comp.returncode != 0:
+        return {
+            "success": False,
+            "passed": False,
+            "error": "编译失败（iverilog 报错）",
+            "stdout": comp.stdout,
+            "stderr": comp.stderr,
+        }
+
+    # 编译通过 -> 运行 vvp
+    try:
+        run = subprocess.run(["vvp", out_file], capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return {"success": True, "passed": False,
+                "error": f"仿真超时（>{timeout}s，可能缺 $finish）",
+                "stdout": "", "stderr": ""}
+    finally:
+        try:
+            os.remove(out_file)
+        except OSError:
+            pass
+
+    # vvp 退出码非 0 视为仿真异常；0 视为通过
+    passed = run.returncode == 0
+    return {
+        "success": True,
+        "passed": passed,
+        "stdout": run.stdout,
+        "stderr": run.stderr,
+        "return_code": run.returncode,
+    }
+
+
 registry.register_tool(ToolDefinition(
     name="generate_verilog",
     description="根据功能描述，用本地 LLM 生成可综合的 Verilog/SystemVerilog 模块并写入文件",
@@ -199,5 +284,19 @@ registry.register_tool(ToolDefinition(
         "output_path": {"type": "string", "description": "可选，生成文件保存路径"},
     },
     function=generate_testbench,
+    requires_approval=False,
+))
+
+registry.register_tool(ToolDefinition(
+    name="simulate_verilog",
+    description="用本地 iverilog/vvp 仿真器编译并运行 Verilog/SystemVerilog（DUT + 测试平台），"
+                "验证生成代码可编译、可仿真，返回编译/运行日志与是否通过（passed）。"
+                "用于把生成的 HDL 真正跑通、补上「未经验证」短板。",
+    parameters={
+        "testbench_path": {"type": "string", "description": "测试平台文件路径（.v/.sv），需含 $finish 收尾"},
+        "dut_path": {"type": "string", "description": "可选，被测设计文件路径；缺省自动收集同目录 *.v/*.sv"},
+        "timeout": {"type": "integer", "description": "编译/仿真超时秒数，默认 60"},
+    },
+    function=simulate_verilog,
     requires_approval=False,
 ))

@@ -43,8 +43,17 @@ def run_streamlit(port: int = 7860):
         sys.exit(1)
     
     try:
+        # 优先使用与当前 python 同目录下的 streamlit（venv 内），避免 PATH 找不到
+        import shutil
+        streamlit_bin = shutil.which("streamlit")
+        if not streamlit_bin:
+            venv_bin = os.path.join(os.path.dirname(sys.executable), "streamlit")
+            if os.path.exists(venv_bin):
+                streamlit_bin = venv_bin
+        if not streamlit_bin:
+            streamlit_bin = "streamlit"
         result = subprocess.run(
-            ["streamlit", "run", streamlit_path,
+            [streamlit_bin, "run", streamlit_path,
              "--server.port", str(port),
              "--server.address", "127.0.0.1",
              "--server.headless", "true",

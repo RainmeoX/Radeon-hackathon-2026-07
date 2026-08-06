@@ -1,9 +1,13 @@
 import logging
+import re
 from typing import List, Dict, Any, Optional
 from .vector_store import VectorStore
 from .document_parser import DocumentParser
 
 logger = logging.getLogger(__name__)
+
+# 型号 / 器件编号样式的 token：字母数字混排且含数字，如 LMT75、W25Q128JV、CW32L012、TMP117
+_PART_TOKEN = re.compile(r"\b(?=[A-Za-z0-9\-]*\d)(?=[A-Za-z0-9\-]*[A-Za-z])[A-Za-z0-9\-]{4,}\b")
 
 
 class MemoryManager:
@@ -46,17 +50,36 @@ class MemoryManager:
         return total_added
 
     def search(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
+        """检索：向量召回 + 型号词混合重排。
+
+        纯向量检索对器件型号这类罕见 token 不敏感（问 LMT75 的供电电压，会被别的
+        芯片的电气参数表挤掉）。因此先多召回候选，再按型号词是否出现在正文 / 文件名
+        重排，保证问哪颗芯片就答哪颗芯片。
+        """
         k = top_k if top_k is not None else self.top_k
-        results = self.vector_store.search(query, top_k=k)
-        
-        context = []
-        for result in results:
-            context.append({
-                "content": result["content"],
-                "metadata": result["metadata"],
-            })
-        
-        return context
+        parts = {t.lower() for t in _PART_TOKEN.findall(query)}
+        # 有型号词时扩大召回池，给重排留出空间
+        pool = k * 6 if parts else k
+        results = self.vector_store.search(query, top_k=pool)
+
+        if parts:
+            def rerank_score(result: Dict[str, Any]) -> float:
+                text = result["content"].lower()
+                source = str((result.get("metadata") or {}).get("source", "")).lower()
+                score = 0.0
+                for part in parts:
+                    if part in source:
+                        score += 2.0
+                    if part in text:
+                        score += 1.0
+                return score
+
+            results = sorted(results, key=rerank_score, reverse=True)
+
+        return [
+            {"content": r["content"], "metadata": r["metadata"]}
+            for r in results[:k]
+        ]
 
     def get_context(self, query: str, top_k: Optional[int] = None) -> str:
         results = self.search(query, top_k=top_k)

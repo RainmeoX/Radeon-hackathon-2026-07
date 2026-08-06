@@ -46,30 +46,35 @@ class RadeonAgent:
                 for i, r in enumerate(results):
                     context_parts.append(f"[参考文档 {i + 1}]\n{r['content']}\n")
                     meta = r.get("metadata", {}) or {}
-                    src = meta.get("source") or meta.get("file") or f"document {i + 1}"
+                    src = (
+                        meta.get("source")
+                        or meta.get("file_name")
+                        or meta.get("file")
+                        or f"document {i + 1}"
+                    )
                     sources.append({"index": i + 1, "source": src, "content": r["content"]})
                 context = "参考文档:\n" + "\n".join(context_parts)
 
         short_term_memory = self.memory_manager.get_short_term_memory() if self.memory_manager else []
-        
-        memory_text = ""
-        for msg in short_term_memory[-5:]:
-            role = msg.get("role", "")
-            content = msg.get("content", "")
-            memory_text += f"{role}: {content}\n"
 
         # system prompt 按模式切换：hardware（磐石硬件研发定位）/ generic（通用）
         system_prompt = get_system_prompt(prompt_mode or self.prompt_mode)
 
         messages = [{"role": "system", "content": system_prompt}]
-        
-        if memory_text:
-            messages.append({"role": "user", "content": f"对话历史:\n{memory_text}"})
-        
+
+        # 短期记忆按原始角色回填成真实多轮对话，交给 chat template 渲染，
+        # 比拼成一段「role: content」文本更贴合指令模型的训练格式。
+        for msg in short_term_memory[-5:]:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+
+        # RAG 上下文与问题合并进同一轮 user 消息，避免出现连续多条 user turn
         if context:
-            messages.append({"role": "user", "content": f"{context}"})
-        
-        messages.append({"role": "user", "content": message})
+            messages.append({"role": "user", "content": f"{context}\n\n问题 / Question:\n{message}"})
+        else:
+            messages.append({"role": "user", "content": message})
 
         response = self.engine.chat_completion(messages)
 

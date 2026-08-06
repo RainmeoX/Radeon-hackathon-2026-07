@@ -1,10 +1,11 @@
-# Streamlit 主题配置（深色 / Codex 风格）
+# Streamlit 主题配置（Kimi / DeepSeek 风格，浅色优先）
 # Streamlit 1.61+ 不再支持 set_page_config(theme=)，主题须在此处设置。
 # 注意：本文件仅控制 UI 外观，不写入任何密钥。
+# 亮/暗双色的主要配色由 ui/web_app.py 的 CSS 变量驱动，这里只设定基准。
 [theme]
-base = "dark"
-primaryColor = "#ff6b6b"
-backgroundColor = "#0d1117"
-secondaryBackgroundColor = "#161b22"
-textColor = "#e6edf3"
+base = "light"
+primaryColor = "#1783ff"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f5f5f5"
+textColor = "#1f1f1f"
 font = "sans serif"
