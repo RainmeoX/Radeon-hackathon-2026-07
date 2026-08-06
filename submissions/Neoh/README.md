@@ -24,7 +24,7 @@ The project started as a general-purpose local agent framework. Hardware R&D usa
 
 - Verilog / testbench generation is LLM-based text generation; it is **not** connected to a simulator (e.g. iverilog) for automatic verification.
 - The hardware features are usage-scenario specializations on top of a general agent framework, not a from-scratch EDA engine.
-- Model selection (14B default) has not yet been backed by a systematic benchmark; 7B also runs.
+- Model selection is backed by a local throughput / latency benchmark (`docs/benchmark_qwen2.5-14b.md`); 14B is the tested default, 7B also runs.
 
 ---
 
@@ -86,14 +86,33 @@ submissions/Neoh/
 │ └── hardware_tools.py # Hardware R&D tools (Verilog / testbench generation)
 ├── ui/
 │ └── web_app.py # Streamlit frontend
-├── scripts/
+├── scripts/ # Helper + doc-generation scripts
 │ ├── download_model.py # Model download CLI
 │ ├── init_rag.py # General RAG initialization CLI
-│ └── init_hardware_rag.py # Hardware knowledge-base initialization CLI
+│ ├── init_hardware_rag.py # Hardware knowledge-base initialization CLI
+│ ├── serve.py # OpenAI-compatible server
+│ ├── benchmark.py # Throughput / latency benchmark
+│ ├── generate_spec.py # Build docs/project_spec.pdf
+│ ├── generate_architecture.py # Build docs/architecture.png
+│ └── generate_poster.py # Build docs/poster.png
+├── docs/ # Specification, reports, posters, architecture diagram
+│ ├── project_spec.pdf # Track 2 specification (PDF)
+│ ├── architecture.png # System architecture diagram
+│ ├── poster.png # Single-page poster
+│ ├── POSTER.md # Poster source content
+│ ├── TEST_REPORT.md / TEST_REPORT.zh-CN.md # Functional test reports
+│ ├── benchmark_qwen2.5-14b.md / .json # Benchmark results
+│ ├── DIFY_INTEGRATION.md # Dify wiring guide
+│ ├── CLOUD_RUN.md # Radeon Cloud bring-up runbook
+│ └── PROJECT_PLAN.md # Project planning notes
+├── notebooks/
+│ └── startup.ipynb # JupyterLab startup / demo notebook
 ├── app.py # Entry point (web / cli)
 ├── config.yaml # Configuration
 ├── requirements.txt # Python dependencies
-├── install_rocm.sh # Linux install script
+├── install_rocm.sh # Linux install script (ROCm-only)
+├── setenv-rocm.sh # ROCm env loader (source before running)
+├── SUBMISSION.md # Submission checklist (requirement → file map)
 └── .gitignore
 ```
 
@@ -212,6 +231,7 @@ security:
 ### Web UI
 
 ```bash
+source setenv-rocm.sh   # 加载 ROCm 环境 + 激活 venv（新 shell 时执行一次）
 python app.py --mode web --port 7860
 ```
 
@@ -220,6 +240,7 @@ Open `http://localhost:7860`. Chat with RAG context, upload documents, view hist
 ### CLI
 
 ```bash
+source setenv-rocm.sh   # 加载 ROCm 环境 + 激活 venv（新 shell 时执行一次）
 python app.py --mode cli
 ```
 
@@ -257,6 +278,17 @@ Measured on AMD Radeon Cloud (Radeon Pro W7900D, 48 GB VRAM, single GPU, ROCm 7.
 - All LLM inference, embedding, and vector search run locally on the AMD GPU; no external API is called during inference.
 - High-risk tools (`delete_file`, `write_file`, `execute_command`, `execute_python`, `code_interpreter`) pause for explicit user approval before execution.
 - Significant events are recorded in `logs/audit.log` (JSON Lines). Chat content is logged as length summaries only.
+
+---
+
+## Test report
+
+Functional test reports covering the agent loop, RAG, tool calling, hardware R&D tools, HITL approval, serving, and web UI are available:
+
+- English: [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md)
+- 中文：[`docs/TEST_REPORT.zh-CN.md`](docs/TEST_REPORT.zh-CN.md)
+
+A throughput / latency benchmark on the Radeon Pro W7900 is also recorded in [`docs/benchmark_qwen2.5-14b.md`](docs/benchmark_qwen2.5-14b.md).
 
 ---
 

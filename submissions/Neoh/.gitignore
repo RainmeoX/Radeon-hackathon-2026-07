@@ -92,3 +92,9 @@ config.local.yaml
 *.tmp
 *.bak
 *.orig
+
+# ---- 开发期工作区（测试脚本 / 日志 / 临时索引，不入库）----
+workspace/
+
+# ---- 硬件工具运行时生成物（Verilog / Testbench）----
+generated/

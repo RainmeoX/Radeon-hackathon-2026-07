@@ -2,7 +2,7 @@
 
 Usage:
     cd submissions/Neoh
-    python docs/generate_spec.py
+    python scripts/generate_spec.py
 
 Output:
     docs/project_spec.pdf
@@ -10,6 +10,9 @@ Output:
 
 from pathlib import Path
 from fpdf import FPDF
+
+# All generated artifacts live in ../docs relative to this script (scripts/).
+DOCS = Path(__file__).resolve().parent.parent / "docs"
 
 
 class SpecPDF(FPDF):
@@ -144,7 +147,7 @@ def main():
     )
 
     # Embed architecture diagram
-    img_path = Path(__file__).with_name("architecture.png")
+    img_path = DOCS / "architecture.png"
     if img_path.exists():
         avail_w = pdf.w - pdf.l_margin - pdf.r_margin
         pdf.image(str(img_path), x=pdf.l_margin, w=avail_w)
@@ -324,7 +327,7 @@ def main():
     )
     pdf.bullet("Verilog / testbench generation is LLM-based text generation; it is not connected to a simulator (iverilog, Verilator) for automatic verification.")
     pdf.bullet("Hardware features are usage-scenario specializations on top of a general agent framework, not a from-scratch EDA engine.")
-    pdf.bullet("Model selection (14B default) has not yet been backed by a systematic benchmark across 7B/14B/32B.")
+    pdf.bullet("Model selection is backed by a local throughput / latency benchmark (docs/benchmark_qwen2.5-14b.md): 14B is the tested default (27.5 tok/s), 7B also profiled (46 tok/s); 32B remains untested on this 48 GB card.")
     pdf.bullet("ROCm inference requires Linux + AMD GPU; Windows desktop cannot run the ROCm vLLM wheel directly.")
     pdf.ln(3)
     pdf.body_text(
@@ -332,7 +335,7 @@ def main():
         "and expand the hardware document corpus with real datasheets."
     )
 
-    out_path = Path(__file__).with_name("project_spec.pdf")
+    out_path = DOCS / "project_spec.pdf"
     pdf.output(str(out_path))
     print(f"Saved project specification to {out_path}")
 

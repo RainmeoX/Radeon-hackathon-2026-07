@@ -18,13 +18,15 @@ import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 import tools  # noqa: F401  导入即触发所有工具注册到 registry
 from inference.engine import InferenceEngine, InferenceConfig
 from memory.manager import MemoryManager
 from agent.core import RadeonAgent
 
 st.set_page_config(
-    page_title="AMD Radeon 本地智能体系统",
+    page_title="磐石 · 硬件研发助手",
     page_icon="🤖",
     layout="wide",
 )
@@ -59,7 +61,7 @@ def init_engine():
 def init_memory():
     rag_config = {"chunk_size": 512, "chunk_overlap": 50, "top_k": 5}
     memory_manager = MemoryManager(
-        index_path="./data/faiss_index",
+        index_path=os.path.join(REPO_ROOT, "data", "faiss_index"),
         embedding_model="all-MiniLM-L6-v2",
         chunk_size=rag_config.get("chunk_size", 512),
         chunk_overlap=rag_config.get("chunk_overlap", 50),
@@ -87,7 +89,7 @@ def init_agent():
     agent = RadeonAgent(engine, memory_manager, prompt_mode=prompt_mode)
     return agent
 
-st.title("🤖 AMD Radeon 本地智能体系统")
+st.title("🤖 磐石 · 硬件研发助手")
 
 with st.sidebar:
     st.header("系统信息")
@@ -102,27 +104,41 @@ with st.sidebar:
     st.info(f"文档索引: {doc_count} 个文本块")
     
     st.header("上传文档")
+    st.caption("选择文件后自动入库，无需额外点击（支持 PDF / DOCX / MD / TXT）")
     uploaded_files = st.file_uploader(
         "选择文档",
         type=["pdf", "docx", "md", "txt"],
         accept_multiple_files=True,
     )
     
+    if "processed_docs" not in st.session_state:
+        st.session_state.processed_docs = set()
+    
     if uploaded_files:
-        if st.button("上传并处理"):
+        new_files = [
+            f for f in uploaded_files
+            if os.path.basename(f.name) not in st.session_state.processed_docs
+        ]
+        if new_files:
             memory_manager = init_memory()
-            save_dir = "./data/documents"
+            save_dir = os.path.join(REPO_ROOT, "data", "documents")
             os.makedirs(save_dir, exist_ok=True)
             
-            for uploaded_file in uploaded_files:
+            for uploaded_file in new_files:
                 safe_name = os.path.basename(uploaded_file.name)
                 file_path = os.path.join(save_dir, safe_name)
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
                 
                 added = memory_manager.add_document(file_path)
-                st.success(f"已处理 {uploaded_file.name}: {added} 个文本块")
-            
+                if added > 0:
+                    st.success(f"已入库 {uploaded_file.name}：{added} 个文本块")
+                    st.session_state.processed_docs.add(safe_name)
+                else:
+                    st.warning(
+                        f"未能从 {uploaded_file.name} 提取文本（可能是扫描件 / 图片型 PDF）。"
+                        "请确认文档为可选中文本格式后重新上传。"
+                    )
             st.rerun()
     
     st.header("操作")
@@ -130,6 +146,13 @@ with st.sidebar:
         agent = init_agent()
         agent.clear_memory()
         st.session_state.messages = []
+        st.rerun()
+    
+    if st.button("清空文档索引"):
+        memory_manager = init_memory()
+        memory_manager.clear_long_term_memory()
+        st.session_state.processed_docs = set()
+        st.success("文档索引已清空，可重新上传")
         st.rerun()
     
     if st.button("重新加载模型"):

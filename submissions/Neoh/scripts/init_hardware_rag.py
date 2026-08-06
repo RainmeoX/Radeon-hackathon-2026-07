@@ -71,6 +71,7 @@ def main():
 
         if not os.path.exists(args.docs_dir):
             logger.warning(f"硬件文档目录不存在: {args.docs_dir}")
+            os.makedirs(args.docs_dir, exist_ok=True)
             logger.info("已为你创建该目录，请将芯片手册 / Datasheet 放入后重新运行：")
             logger.info(f"  {os.path.abspath(args.docs_dir)}")
             sys.exit(0)

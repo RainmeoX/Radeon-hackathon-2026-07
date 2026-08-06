@@ -42,6 +42,13 @@ os.environ.setdefault("PYTORCH_ROCM_ARCH", "gfx1100")
 os.environ.setdefault("HIP_VISIBLE_DEVICES", "0")
 os.environ.setdefault("HSA_ENABLE_SDMA", "0")
 os.environ.setdefault("VLLM_WORKER_MULTIPROC_METHOD", "spawn")
+# glibc 2.35 (Ubuntu 22.04) 兼容 + flash-attn ROCm 启用（与 app.py / scripts/serve.py 一致）
+os.environ.setdefault("FLASH_ATTENTION_TRITON_AMD_ENABLE", "TRUE")
+os.environ.setdefault(
+    "PYTHONPATH",
+    os.path.join(sys.prefix, "lib", "python3.14", "site-packages",
+                 "_rocm_sdk_core", "share", "amd_smi"),
+)
 
 # 把项目根目录加入 sys.path，使 `inference` / `agent` 可被导入
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

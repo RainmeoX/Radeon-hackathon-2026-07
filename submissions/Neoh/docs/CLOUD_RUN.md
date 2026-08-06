@@ -81,6 +81,7 @@ python scripts/download_model.py --model qwen2.5-14b
 
 ### CLI 模式（录 Demo 最方便）
 ```bash
+source setenv-rocm.sh   # 加载 ROCm 环境 + 激活 venv（新 shell 时执行一次）
 python app.py --mode cli
 ```
 进去后试：
@@ -91,6 +92,7 @@ task 用 Verilog 写一个带同步使能的 4 位向上计数器，并生成对
 
 ### Web 模式（Streamlit）
 ```bash
+source setenv-rocm.sh   # 加载 ROCm 环境 + 激活 venv（新 shell 时执行一次）
 python app.py --mode web --port 7860
 ```
 - **JupyterLab 内**：新开 Terminal 跑上面命令，浏览器另开 `http://localhost:7860`（部分镜像需走 JupyterLab 代理）。

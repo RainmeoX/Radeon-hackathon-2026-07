@@ -2,7 +2,7 @@
 
 Usage:
     cd submissions/Neoh
-    python docs/generate_architecture.py
+    python scripts/generate_architecture.py
 
 Output:
     docs/architecture.png
@@ -13,6 +13,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+from pathlib import Path
+
+# All generated artifacts live in ../docs relative to this script (scripts/).
+DOCS = Path(__file__).resolve().parent.parent / "docs"
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +200,7 @@ def main():
     )
 
     plt.tight_layout()
-    out_path = "docs/architecture.png"
+    out_path = str(DOCS / "architecture.png")
     plt.savefig(out_path, dpi=200, bbox_inches="tight", facecolor="white", edgecolor="none")
     print(f"Saved architecture diagram to {out_path}")
 

@@ -44,7 +44,11 @@ def run_streamlit(port: int = 7860):
     
     try:
         result = subprocess.run(
-            ["streamlit", "run", streamlit_path, "--server.port", str(port)],
+            ["streamlit", "run", streamlit_path,
+             "--server.port", str(port),
+             "--server.address", "127.0.0.1",
+             "--server.headless", "true",
+             "--server.baseUrlPath", ""],
             check=True,
         )
     except subprocess.CalledProcessError as e:
