@@ -40,54 +40,60 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# 现代样式（浅色、卡片化、AMD 红强调色）
+# ChatGPT / Codex 风格深色界面：清晰边界、区分用户/助手、可见输入框
 # ---------------------------------------------------------------------------
 CSS = """
 <style>
-/* 隐藏默认顶栏 / 页脚 / 右上角菜单 */
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-header[data-testid="stHeader"] {visibility: hidden;}
+#MainMenu, footer, header[data-testid="stHeader"] { visibility: hidden; }
 
-/* 强制深色底（兜底：覆盖浏览器暗色模式下的白底） */
+/* 应用底：最深的黑，作为侧栏/背景层 */
 .stApp {
-    background: #0d1117 !important;
+    background: #0a0c10 !important;
     color: #e6edf3 !important;
 }
 
-/* 主内容居中限宽 */
-.main .block-container {
+/* 主内容作为独立的对话表面（比背景浅一号，有左右边界） */
+.block-container {
     max-width: 920px;
     margin: 0 auto;
-    padding-top: 1rem;
+    padding-top: 0;
+    padding-bottom: 120px;
+    min-height: 100vh;
+    background: #13161d !important;
+    border-left: 1px solid #22262e !important;
+    border-right: 1px solid #22262e !important;
 }
 
-/* 顶部品牌栏（Codex 风格：深底 + 细描边） */
+/* 顶部品牌栏：清晰分隔，浅色表面 + 底部描边 */
 .topbar {
-    background: linear-gradient(90deg, #161b22 0%, #0d1117 100%);
-    border: 1px solid #21262d;
-    border-radius: 14px;
-    padding: 16px 22px;
-    margin-bottom: 18px;
+    background: #1a1e26;
+    border-bottom: 1px solid #2f3640;
+    color: #f0f2f5;
+    padding: 16px 24px;
+    margin-bottom: 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
-.topbar .brand { font-size: 22px; font-weight: 700; color: #e6edf3; letter-spacing: .3px; }
+.topbar .brand { font-size: 18px; font-weight: 700; letter-spacing: .2px; }
 .topbar .brand span { color: #ff6b6b; font-weight: 600; }
-.topbar .tag { font-size: 12px; color: #8b949e; text-align: right; line-height: 1.4; }
+.topbar .tag { font-size: 12px; color: #9aa3b2; text-align: right; line-height: 1.4; }
 
-/* 侧栏 */
+/* 侧栏：比主内容更深的表面 */
+section[data-testid="stSidebar"] {
+    background: #0d1117 !important;
+}
 section[data-testid="stSidebar"] > div:first-child {
     background: #0d1117 !important;
-    border-right: 1px solid #21262d;
+    border-right: 1px solid #232831 !important;
 }
 section[data-testid="stSidebar"] .stButton > button {
-    background: #21262d; color: #e6edf3; border: 1px solid #30363d;
-    border-radius: 9px; font-weight: 600; width: 100%;
+    background: #181b22; color: #e6edf3; border: 1px solid #2c313a;
+    border-radius: 8px; font-weight: 600; width: 100%;
+    transition: all .15s ease;
 }
 section[data-testid="stSidebar"] .stButton > button:hover {
-    background: #30363d; border-color: #8b949e;
+    background: #22262f; border-color: #3d4552;
 }
 
 /* 知识库计数徽标 */
@@ -97,25 +103,47 @@ section[data-testid="stSidebar"] .stButton > button:hover {
     padding: 2px 12px; font-size: 13px; font-weight: 600;
 }
 
-/* 聊天气泡（深色卡片 + 细描边） */
+/* 聊天气泡：清晰边界 + 阴影 */
 .stChatMessage {
-    border-radius: 14px !important;
-    padding: 12px 16px !important;
-    margin-bottom: 10px !important;
-    border: 1px solid #21262d !important;
-    background: #161b22 !important;
+    border-radius: 16px !important;
+    padding: 14px 18px !important;
+    margin-bottom: 14px !important;
+    border: 1px solid #2f3640 !important;
+    background: #1a1d25 !important;
     color: #e6edf3 !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.18) !important;
 }
 .stChatMessage[data-testid="stChatMessageContent"] { background: transparent !important; }
+
+/* 用户消息：右对齐、明显填充 */
+.stChatMessage:has([data-testid="stChatMessageAvatarUser"]) {
+    background: #2b303a !important;
+    border-color: #3c424d !important;
+    margin-left: 60px !important;
+}
+/* 助手消息：左对齐、稍浅背景 */
+.stChatMessage:has([data-testid="stChatMessageAvatarAssistant"]) {
+    background: #161920 !important;
+    border-color: #252b35 !important;
+    margin-right: 60px !important;
+}
 
 /* 来源展开 */
 .streamlit-expanderHeader { font-size: 13px; color: #8b949e !important; }
 
-/* 输入条 */
-.stChatInput { border-radius: 12px; }
+/* 输入框容器：高对比圆角卡片，始终可见 */
+.stChatInput {
+    background: #1f242d !important;
+    border: 1px solid #4a505a !important;
+    border-radius: 18px !important;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.35) !important;
+    padding: 8px 12px !important;
+}
 .stChatInput textarea {
-    background: #0d1117 !important; color: #e6edf3 !important;
-    border: 1px solid #30363d !important;
+    background: transparent !important;
+    color: #e6edf3 !important;
+    border: none !important;
+    font-size: 15px !important;
 }
 </style>
 """
@@ -131,6 +159,19 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# 空对话时显示居中的品牌提示（类似 ChatGPT 首页）
+if len(st.session_state.get("messages", [])) == 0:
+    st.markdown(
+        """
+        <div style="text-align:center; margin-top: 7vh; color:#8b949e;">
+            <div style="font-size:48px; margin-bottom:14px;">🤖</div>
+            <div style="font-size:26px; font-weight:700; color:#e6edf3; margin-bottom:8px;">Bedrock</div>
+            <div style="font-size:14px; margin-bottom:36px;">Hardware R&D Assistant · 100% local inference on AMD Radeon</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # ---------------------------------------------------------------------------
